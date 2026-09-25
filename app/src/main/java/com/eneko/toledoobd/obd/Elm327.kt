@@ -118,19 +118,63 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
         log("PIDs soportados: " + supported.sorted().joinToString { "%02X".format(it) })
 
         onStep("Optimizando velocidad de lectura…")
-        val t0 = System.currentTimeMillis()
-        val normal = ObdParser.parsePid(io.send("010C", 2000), 0x0C)
-        val tNormal = System.currentTimeMillis() - t0
-        val t1 = System.currentTimeMillis()
-        val quick = ObdParser.parsePid(io.send("010C1", 2000), 0x0C)
-        val tQuick = System.currentTimeMillis() - t1
-        fastReplies = quick != null
-        if (normal == null && quick == null) {
-            // Temporización agresiva demasiado justa para esta ECU: volver a la estándar.
-            io.send("ATAT1", 1500)
-            log("ATAT2 sin respuesta, vuelvo a ATAT1")
+        val tNormal = timeRead("010C")
+        val tQuick = timeRead("010C1")
+        // Solo vale la pena si el adaptador lo entiende y de verdad contesta antes.
+        fastReplies = tQuick != null && (tNormal == null || tQuick < tNormal * 0.75)
+        log("Lectura normal: ${tNormal ?: "-"} ms · con sufijo: ${tQuick ?: "-"} ms · modo rápido: ${if (fastReplies) "sí" else "no"}")
+        tuneTimeout(onStep)
+    }
+
+    /** Milisegundos que tarda una lectura de rpm, o null si no hay respuesta válida. */
+    private suspend fun timeRead(cmd: String): Long? {
+        val t = System.currentTimeMillis()
+        val ok = ObdParser.parsePid(io.send(cmd, 2000), 0x0C) != null
+        return if (ok) System.currentTimeMillis() - t else null
+    }
+
+    private val rpmCmd get() = if (fastReplies) "010C1" else "010C"
+
+    /** true cuando se ha fijado un tiempo de espera recortado a mano. */
+    var tunedTimeout = false
+        private set
+
+    /**
+     * El ELM327, tras la respuesta de la ECU, espera un tiempo de seguridad (≈200 ms por defecto)
+     * por si llegan más respuestas. Se prueba con esperas cada vez mayores y se elige la más
+     * corta con la que la ECU responde siempre, con un margen de seguridad.
+     */
+    private suspend fun tuneTimeout(onStep: (String) -> Unit) {
+        onStep("Ajustando tiempos de la línea K…")
+        io.send("ATAT0", 1500)
+        val candidates = listOf(0x0A, 0x0F, 0x14, 0x1C, 0x28) // ×4 ms: 40, 60, 80, 112, 160 ms
+        for ((i, st) in candidates.withIndex()) {
+            io.send("ATST%02X".format(st), 1500)
+            var worst = 0L
+            var ok = true
+            repeat(5) {
+                val t = timeRead(rpmCmd)
+                if (t == null) ok = false else worst = maxOf(worst, t)
+            }
+            log("ATST ${st * 4} ms → ${if (ok) "OK, peor lectura $worst ms" else "falla"}")
+            if (ok) {
+                // Un escalón de margen para no perder respuestas en marcha.
+                val chosen = candidates.getOrElse(i + 1) { st }
+                io.send("ATST%02X".format(chosen), 1500)
+                tunedTimeout = true
+                log("Tiempo de espera fijado en ${chosen * 4} ms")
+                return
+            }
         }
-        log("Lectura normal: $tNormal ms · rápida: $tQuick ms · modo rápido: ${if (fastReplies) "sí" else "no"}")
+        relaxTimeout()
+    }
+
+    /** Vuelve a la temporización estándar del ELM327 (si la ECU empieza a no contestar). */
+    suspend fun relaxTimeout() {
+        io.send("ATST32", 1500)
+        io.send("ATAT1", 1500)
+        tunedTimeout = false
+        log("Temporización estándar (ATST 200 ms, ATAT1)")
     }
 
     suspend fun query(pid: Int, timeoutMs: Long = 2000): IntArray? {

@@ -226,16 +226,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun pollLoop(obd: ObdSession, source: FuelSource) {
         val sup = obd.supported
-        val fast = buildList {
-            add(Pid.RPM)
-            add(Pid.SPEED)
-            when (source) {
-                FuelSource.FUEL_RATE -> add(Pid.FUEL_RATE)
-                FuelSource.LOAD -> add(Pid.LOAD)
-                FuelSource.MAF -> add(Pid.MAF)
-                FuelSource.NONE -> Unit
-            }
+        // rpm en cada ciclo; velocidad y dato de consumo alternados (cambian más despacio
+        // que la aguja del cuentarrevoluciones y así cada ciclo son solo 2 peticiones).
+        val fuelPid = when (source) {
+            FuelSource.FUEL_RATE -> Pid.FUEL_RATE
+            FuelSource.LOAD -> Pid.LOAD
+            FuelSource.MAF -> Pid.MAF
+            FuelSource.NONE -> null
         }
+        val alternate = listOfNotNull(Pid.SPEED, fuelPid)
         val slow = listOf(Pid.MAP, Pid.COOLANT, Pid.MAP, Pid.IAT, Pid.MAP, VOLTAGE, Pid.BARO)
             .filter { it == VOLTAGE || it in sup }
         val failures = mutableMapOf<Int, Int>()
@@ -250,6 +249,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val cycleStart = SystemClock.elapsedRealtime()
             cycle++
             ioLock.withLock {
+                val fast = listOf(Pid.RPM, alternate[cycle % alternate.size])
                 for (pid in fast) {
                     val b = obd.query(pid)
                     if (b == null) {
@@ -278,6 +278,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
+            }
+            if (rpmMisses == 2 && obd.tunedTimeout) {
+                // Con el tiempo recortado la ECU ha dejado de contestar: volver al estándar.
+                ioLock.withLock { obd.relaxTimeout() }
             }
             val responding = rpmMisses < 4
             if (!responding) live = live.copy(rpm = 0f, speed = 0f)

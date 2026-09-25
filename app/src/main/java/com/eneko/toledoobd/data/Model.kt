@@ -72,7 +72,9 @@ object FuelModel {
                 // La EDC15 no marca 0 % con inyección cero: se descuenta la carga de retención.
                 val zero = s.loadOffset ?: 0f
                 val frac = ((load - zero) / (100f - zero)).coerceIn(0f, 1f)
-                val iqMg = frac * s.engine.maxIqMg
+                // En diésel el PID 04 es % del par (≈ inyección) máximo *a las rpm actuales*,
+                // así que se multiplica por la curva de plena carga, no por el máximo absoluto.
+                val iqMg = frac * s.engine.maxIqMg * FullLoadCurve.shape(d.rpm)
                 val gramsPerSec = iqMg * d.rpm / 30f / 1000f
                 gramsPerSec * 3600f / DIESEL_DENSITY_G_PER_L
             }
@@ -83,6 +85,23 @@ object FuelModel {
             FuelSource.NONE -> 0f
         }
         return lph * s.calibration
+    }
+}
+
+/**
+ * Forma de la curva de inyección a plena carga de un 1.9 TDI PD/VE (limitador de humos y par),
+ * normalizada a 1 en el máximo (~1900-2500 rpm). Al ralentí el máximo permitido es la mitad.
+ */
+object FullLoadCurve {
+    private val rpm = floatArrayOf(800f, 1000f, 1250f, 1500f, 1750f, 2000f, 2500f, 3000f, 3500f, 4000f, 4500f)
+    private val k = floatArrayOf(0.48f, 0.55f, 0.68f, 0.84f, 0.97f, 1.0f, 0.98f, 0.90f, 0.77f, 0.65f, 0.52f)
+
+    fun shape(r: Float): Float {
+        if (r <= rpm.first()) return k.first()
+        if (r >= rpm.last()) return k.last()
+        val i = rpm.indexOfFirst { it >= r }
+        val t = (r - rpm[i - 1]) / (rpm[i] - rpm[i - 1])
+        return k[i - 1] + (k[i] - k[i - 1]) * t
     }
 }
 

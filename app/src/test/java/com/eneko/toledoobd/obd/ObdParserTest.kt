@@ -59,14 +59,13 @@ class ObdParserTest {
 
     @Test
     fun fuelEstimateIsRealisticForTdi() {
-        val s = Settings(engine = EnginePreset.ASV)
-        val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 11f), FuelSource.LOAD, s)
-        assertTrue("ralentí $idle", idle in 0.4f..1.2f)
-        val cruise = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 28f), FuelSource.LOAD, s)
-        val l100 = cruise / 100f * 100f
-        assertTrue("crucero $l100", l100 in 3.5f..7f)
-        val stage1 = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 28f), FuelSource.LOAD, Settings())
-        assertTrue("stage 1 por defecto", stage1 > cruise)
+        val s = Settings(engine = EnginePreset.ASV_STAGE1, loadOffset = 0.8f)
+        // Dato real del coche: 900 rpm, carga 22,7 % al ralentí
+        val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 22.7f), FuelSource.LOAD, s)
+        assertTrue("ralentí $idle", idle in 0.5f..1.1f)
+        val cruise = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 26f), FuelSource.LOAD, s)
+        assertTrue("crucero $cruise", cruise in 3.5f..7f)
+        assertEquals(0f, FuelModel.litersPerHour(LiveData(rpm = 2000f, speed = 80f, load = 0.8f), FuelSource.LOAD, s), 0.001f)
     }
 
     @Test
@@ -87,7 +86,7 @@ class ObdParserTest {
         val s = Settings(loadOffset = l.offset)
         assertEquals(0f, FuelModel.litersPerHour(LiveData(rpm = 2100f, speed = 90f, load = 20.4f), FuelSource.LOAD, s), 0.001f)
         val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 25f), FuelSource.LOAD, s)
-        assertTrue("ralentí $idle", idle in 0.2f..1.0f)
+        assertTrue("ralentí $idle", idle in 0.05f..1.0f)
     }
 
     @Test

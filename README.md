@@ -37,7 +37,7 @@ los datos de un **SEAT Toledo II 1.9 TDI (2003)**, incluido el consumo en **L/10
 
 La centralita EDC15 del TDI no envía el caudal de combustible por OBD, así que la app lo **estima** a partir de
 la carga del motor (PID 04) y las rpm: cantidad inyectada ≈ carga × inyección máxima del motor elegido en
-Ajustes (90, 110, 130 o 150 CV). Si la centralita envía el PID 5E (caudal real), la app lo usa directamente.
+Ajustes (90, 110, 110 Stage 1, 130 o 150 CV). Si la centralita envía el PID 5E (caudal real), la app lo usa directamente.
 
 Para afinar la cifra, en **Ajustes → Calibración**:
 

@@ -65,6 +65,8 @@ class ObdParserTest {
         val cruise = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 28f), FuelSource.LOAD, s)
         val l100 = cruise / 100f * 100f
         assertTrue("crucero $l100", l100 in 3.5f..7f)
+        val stage1 = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 28f), FuelSource.LOAD, Settings())
+        assertTrue("stage 1 por defecto", stage1 > cruise)
     }
 
     @Test

@@ -151,7 +151,8 @@ fun SettingsSheet(
             }
         }
         Text(
-            "Define la inyección máxima usada para estimar el consumo a partir de la carga del motor.",
+            "Define la inyección máxima usada para estimar el consumo a partir de la carga del motor. " +
+                "Con el coche reprogramado cada mapa es distinto: calibra con un repostaje para que la cifra sea exacta.",
             style = dim,
         )
 

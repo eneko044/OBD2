@@ -31,12 +31,13 @@ enum class FuelSource(val label: String) {
 enum class EnginePreset(val label: String, val maxIqMg: Float) {
     ALH("1.9 TDI 90 CV (ALH/AGR)", 45f),
     ASV("1.9 TDI 110 CV (ASV/AHF)", 52f),
+    ASV_STAGE1("1.9 TDI 110 CV Stage 1 (~140 CV)", 61f),
     ASZ("1.9 TDI 130 CV (ASZ)", 58f),
     ARL("1.9 TDI 150 CV (ARL)", 63f),
 }
 
 data class Settings(
-    val engine: EnginePreset = EnginePreset.ASV,
+    val engine: EnginePreset = EnginePreset.ASV_STAGE1,
     val calibration: Float = 1.0f,
     val fuelPrice: Float = 1.55f,
     val lastDevice: String? = null,
@@ -108,17 +109,21 @@ data class TripStats(
     val fuelL: Double = 0.0,
     val timeS: Double = 0.0,
     val maxSpeed: Float = 0f,
+    val maxBoost: Float = 0f,
+    val maxRpm: Float = 0f,
 ) {
     val avgL100: Float? get() = if (distanceKm > 0.3) (fuelL / distanceKm * 100).toFloat() else null
     val avgSpeed: Float? get() = if (timeS > 30) (distanceKm / (timeS / 3600)).toFloat() else null
 
-    fun add(speed: Float, rpm: Float, lph: Float, dtS: Double): TripStats {
+    fun add(speed: Float, rpm: Float, lph: Float, boost: Float?, dtS: Double): TripStats {
         if (rpm < 300f) return this
         return copy(
             distanceKm = distanceKm + speed * dtS / 3600.0,
             fuelL = fuelL + lph * dtS / 3600.0,
             timeS = timeS + dtS,
             maxSpeed = maxOf(maxSpeed, speed),
+            maxBoost = maxOf(maxBoost, boost ?: 0f),
+            maxRpm = maxOf(maxRpm, rpm),
         )
     }
 }

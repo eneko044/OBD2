@@ -350,7 +350,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val moving = live.speed >= 5f
         val l100 = if (moving) (smoothLph / live.speed * 100f).coerceAtMost(99.9f) else null
 
-        val trip = cur.trip.add(live.speed, live.rpm, lph, dt)
+        val trip = cur.trip.add(live.speed, live.rpm, lph, live.boostBar, dt)
 
         var history = cur.history
         if (now - lastHistoryAt >= 1000) {
@@ -433,7 +433,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun loadSettings() = Settings(
-        engine = EnginePreset.entries.getOrElse(prefs.getInt("engine", EnginePreset.ASV.ordinal)) { EnginePreset.ASV },
+        engine = EnginePreset.entries.firstOrNull { it.name == prefs.getString("engineName", null) }
+            ?: EnginePreset.ASV_STAGE1,
         calibration = prefs.getFloat("calibration", 1f),
         fuelPrice = prefs.getFloat("fuelPrice", 1.55f),
         lastDevice = prefs.getString("lastDevice", null),
@@ -442,7 +443,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private fun saveSettings(s: Settings) {
         _settings.value = s
         prefs.edit()
-            .putInt("engine", s.engine.ordinal)
+            .putString("engineName", s.engine.name)
             .putFloat("calibration", s.calibration)
             .putFloat("fuelPrice", s.fuelPrice)
             .putString("lastDevice", s.lastDevice)
@@ -454,6 +455,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         fuelL = prefs.getFloat("tripFuel", 0f).toDouble(),
         timeS = prefs.getFloat("tripTime", 0f).toDouble(),
         maxSpeed = prefs.getFloat("tripMax", 0f),
+        maxBoost = prefs.getFloat("tripMaxBoost", 0f),
+        maxRpm = prefs.getFloat("tripMaxRpm", 0f),
     )
 
     private fun saveTrip() {
@@ -464,6 +467,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putFloat("tripFuel", t.fuelL.toFloat())
             .putFloat("tripTime", t.timeS.toFloat())
             .putFloat("tripMax", t.maxSpeed)
+            .putFloat("tripMaxBoost", t.maxBoost)
+            .putFloat("tripMaxRpm", t.maxRpm)
             .apply()
     }
 

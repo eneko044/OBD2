@@ -337,7 +337,7 @@ private fun MetersPanel(s: DashState) {
                 listOf(Dash.Blue, Dash.Green, Dash.Amber, Dash.Red), size = meter,
             )
             ArcMeter(
-                l.boostBar, 0f, 1.6f, "Turbo", l.boostBar?.let { f2(it) } ?: "--", "bar",
+                l.boostBar, 0f, 2.0f, "Turbo", l.boostBar?.let { f2(it) } ?: "--", "bar",
                 listOf(Dash.RedDeep, Dash.Red, Dash.RedSoft), size = meter,
             )
             ArcMeter(
@@ -353,6 +353,7 @@ private fun MetersPanel(s: DashState) {
         val warning = when {
             l.voltage != null && l.rpm > 500f && l.voltage < 13.0f -> "Tensión baja con motor en marcha: revisa el alternador"
             l.coolant != null && l.coolant > 105f -> "Temperatura del motor alta"
+            (l.boostBar ?: 0f) > 1.6f -> "Sobrepresión de turbo: posible corte (P0234)"
             l.coolant != null && l.rpm > 500f && l.coolant < 60f -> "Motor frío: evita pasar de 3000 rpm"
             else -> null
         }
@@ -386,6 +387,15 @@ private fun TripPanel(s: DashState, settings: Settings, onReset: () -> Unit) {
             StatTile("Tiempo", time, "h", Modifier.weight(1f))
             StatTile("Vel. media", t.avgSpeed?.toInt()?.toString() ?: "--", "km/h", Modifier.weight(1f))
             StatTile("Vel. máx", t.maxSpeed.toInt().toString(), "km/h", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth()) {
+            StatTile(
+                "Turbo máx", if (t.maxBoost > 0f) f2(t.maxBoost) else "--", "bar", Modifier.weight(1f),
+                accent = if (t.maxBoost > 0f) Dash.RedSoft else Dash.Text,
+            )
+            StatTile("Rpm máx", t.maxRpm.toInt().toString(), "rpm", Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
         }
     }
 }

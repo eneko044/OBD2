@@ -3,6 +3,7 @@ package com.eneko.toledoobd.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -116,12 +117,18 @@ fun DashboardScreen(
 
     val rpmAnim = remember { Animatable(0f) }
     val speedAnim = remember { Animatable(0f) }
+    // Con OBD real llegan pocas lecturas por segundo: la aguja recorre el tramo hasta el nuevo
+    // valor en el tiempo que tarda la siguiente lectura, así se mueve de forma continua sin saltos.
+    val rpmMs = if (s.demo || s.updateHz <= 0f) 0 else (1000f / s.updateHz).toInt().coerceIn(120, 800)
     val needleSpring = spring<Float>(dampingRatio = 0.75f, stiffness = 420f)
     LaunchedEffect(s.live.rpm, intro) {
-        if (intro) rpmAnim.snapTo(0f) else rpmAnim.animateTo(s.live.rpm, needleSpring)
+        if (intro) rpmAnim.snapTo(0f)
+        else rpmAnim.animateTo(s.live.rpm, if (rpmMs == 0) needleSpring else tween(rpmMs, easing = LinearEasing))
     }
     LaunchedEffect(s.live.speed, intro) {
-        if (intro) speedAnim.snapTo(0f) else speedAnim.animateTo(s.live.speed, needleSpring)
+        // La velocidad se lee en ciclos alternos: su tramo dura el doble.
+        if (intro) speedAnim.snapTo(0f)
+        else speedAnim.animateTo(s.live.speed, if (rpmMs == 0) needleSpring else tween((rpmMs * 2).coerceAtMost(1200), easing = LinearEasing))
     }
     val rpmFrac = if (intro) sweep.value else rpmAnim.value / RPM_MAX
     val speedFrac = if (intro) sweep.value else speedAnim.value / SPEED_MAX

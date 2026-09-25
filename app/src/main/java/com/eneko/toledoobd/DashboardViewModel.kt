@@ -259,9 +259,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         live = apply(live, pid, b)
                     }
                 }
-                // Los datos lentos (temperaturas, turbo, batería) solo cada 3 ciclos,
+                // Los datos lentos (temperaturas, turbo, batería) solo cada 4 ciclos,
                 // para que rpm, velocidad y consumo se refresquen lo más rápido posible.
-                if (slow.isNotEmpty() && cycle % 3 == 0) {
+                if (slow.isNotEmpty() && cycle % 4 == 0) {
                     val pid = slow[slowIdx % slow.size]
                     slowIdx++
                     if ((failures[pid] ?: 0) < 6) {

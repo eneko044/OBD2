@@ -70,6 +70,23 @@ class ObdParserTest {
     }
 
     @Test
+    fun learnsLoadOffsetWhileCoasting() {
+        val l = com.eneko.toledoobd.data.LoadOffsetLearner(null)
+        // crucero estable: no aprende
+        repeat(5) { l.feed(LiveData(rpm = 2200f, speed = 100f, load = 35f)) }
+        assertNull(l.offset)
+        // retención: velocidad bajando con carga ~20 %
+        var v = 100f
+        repeat(5) { v -= 1.5f; l.feed(LiveData(rpm = 2100f, speed = v, load = 20.4f, mapKpa = 100f, baroKpa = 100f)) }
+        assertEquals(20.4f, l.offset!!, 0.01f)
+        // con el cero aprendido, en retención el consumo es 0 y al ralentí es bajo
+        val s = Settings(loadOffset = l.offset)
+        assertEquals(0f, FuelModel.litersPerHour(LiveData(rpm = 2100f, speed = 90f, load = 20.4f), FuelSource.LOAD, s), 0.001f)
+        val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 25f), FuelSource.LOAD, s)
+        assertTrue("ralentí $idle", idle in 0.2f..1.0f)
+    }
+
+    @Test
     fun estimatesGear() {
         assertEquals(5, GearEstimator.gear(2165f, 100f))
         assertEquals(1, GearEstimator.gear(2000f, 18.6f))

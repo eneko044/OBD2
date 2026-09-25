@@ -41,6 +41,8 @@ data class Settings(
     val calibration: Float = 1.0f,
     val fuelPrice: Float = 1.55f,
     val lastDevice: String? = null,
+    /** Carga (%) que marca la ECU con inyección cero (en retención). null = aún sin aprender. */
+    val loadOffset: Float? = null,
 )
 
 /**
@@ -67,7 +69,10 @@ object FuelModel {
             FuelSource.FUEL_RATE -> d.fuelRateLph ?: 0f
             FuelSource.LOAD -> {
                 val load = d.load ?: return 0f
-                val iqMg = load / 100f * s.engine.maxIqMg
+                // La EDC15 no marca 0 % con inyección cero: se descuenta la carga de retención.
+                val zero = s.loadOffset ?: 0f
+                val frac = ((load - zero) / (100f - zero)).coerceIn(0f, 1f)
+                val iqMg = frac * s.engine.maxIqMg
                 val gramsPerSec = iqMg * d.rpm / 30f / 1000f
                 gramsPerSec * 3600f / DIESEL_DENSITY_G_PER_L
             }
@@ -78,6 +83,44 @@ object FuelModel {
             FuelSource.NONE -> 0f
         }
         return lph * s.calibration
+    }
+}
+
+/**
+ * Aprende qué carga marca la centralita cuando no inyecta nada: en retención
+ * (marcha metida, pie fuera del acelerador) el diésel corta la inyección, así que
+ * la carga mínima vista decelerando en marcha es el "cero" real.
+ */
+class LoadOffsetLearner(initial: Float?) {
+    var offset: Float? = initial
+        private set
+    private var prevSpeed = 0f
+    private var streak = 0
+    private var streakMax = 0f
+
+    /** Devuelve true si el valor aprendido ha cambiado. */
+    fun feed(d: LiveData): Boolean {
+        val load = d.load
+        val decelerating = d.speed >= 25f && d.rpm >= 1200f && d.speed <= prevSpeed - 0.4f &&
+            (d.boostBar ?: 0f) < 0.15f
+        prevSpeed = d.speed
+        if (load == null || !decelerating) {
+            streak = 0
+            return false
+        }
+        streakMax = if (streak == 0) load else maxOf(streakMax, load)
+        streak++
+        // Tres lecturas seguidas decelerando: se toma la mayor de ellas para evitar picos sueltos.
+        if (streak >= 3 && (offset == null || streakMax < offset!! - 0.1f) && streakMax < 40f) {
+            offset = streakMax
+            return true
+        }
+        return false
+    }
+
+    fun reset() {
+        offset = null
+        streak = 0
     }
 }
 

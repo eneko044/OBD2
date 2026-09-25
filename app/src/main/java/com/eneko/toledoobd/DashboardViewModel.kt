@@ -15,6 +15,7 @@ import com.eneko.toledoobd.data.FuelModel
 import com.eneko.toledoobd.data.FuelSource
 import com.eneko.toledoobd.data.GearEstimator
 import com.eneko.toledoobd.data.LiveData
+import com.eneko.toledoobd.data.LoadOffsetLearner
 import com.eneko.toledoobd.data.Settings
 import com.eneko.toledoobd.data.TripStats
 import com.eneko.toledoobd.obd.ElmIo
@@ -35,6 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -98,6 +100,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var lastSaveAt = 0L
     private var smoothLph = 0f
     private var autoConnectTried = false
+    private val offsetLearner = LoadOffsetLearner(_settings.value.loadOffset)
+    private val csv = ArrayDeque<String>()
+    private var lastCsvAt = 0L
+    private var supportedInfo = "sin conexión OBD"
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
@@ -152,6 +158,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 session = obd
                 val source = FuelModel.source(obd.supported)
+                supportedInfo = "Protocolo ${obd.protocol} · PIDs soportados: " +
+                    obd.supported.sorted().joinToString(" ") { "%02X".format(it) }
                 log("Protocolo: ${obd.protocol} · consumo: ${source.label}")
                 _state.update {
                     it.copy(
@@ -344,9 +352,17 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, 2.0)
         lastSampleAt = now
 
+        if (learnsLoadOffset() && offsetLearner.feed(live)) {
+            log("Carga de retención aprendida: %.1f %%".format(offsetLearner.offset))
+            saveSettings(_settings.value.copy(loadOffset = offsetLearner.offset))
+        }
         val cur = _state.value
         val lph = FuelModel.litersPerHour(live, cur.fuelSource, _settings.value)
-        smoothLph = if (smoothLph == 0f) lph else smoothLph + (lph - smoothLph) * 0.35f
+        smoothLph = when {
+            live.rpm < 300f -> 0f
+            smoothLph == 0f -> lph
+            else -> smoothLph + (lph - smoothLph) * 0.35f
+        }
         val moving = live.speed >= 5f
         val l100 = if (moving) (smoothLph / live.speed * 100f).coerceAtMost(99.9f) else null
 
@@ -372,6 +388,45 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             lastSaveAt = now
             saveTrip()
         }
+        if (now - lastCsvAt >= 1000) {
+            lastCsvAt = now
+            val row = String.format(
+                    Locale.US, "%s,%.0f,%.0f,%s,%s,%s,%s,%.2f,%s,%s",
+                    timeFmt.format(Date()), live.rpm, live.speed,
+                    live.load?.let { "%.1f".format(Locale.US, it) } ?: "",
+                    live.boostBar?.let { "%.2f".format(Locale.US, it) } ?: "",
+                    live.maf?.let { "%.1f".format(Locale.US, it) } ?: "",
+                    live.coolant?.let { "%.0f".format(Locale.US, it) } ?: "",
+                    smoothLph, l100?.let { "%.1f".format(Locale.US, it) } ?: "",
+                    GearEstimator.gear(live.rpm, live.speed)?.toString() ?: "",
+                )
+            synchronized(csv) {
+                csv.addLast(row)
+                while (csv.size > CSV_MAX_ROWS) csv.removeFirst()
+            }
+        }
+    }
+
+    private fun learnsLoadOffset() = _state.value.fuelSource == FuelSource.LOAD && !_state.value.demo
+
+    /** Escribe los datos registrados (hasta 2 h, 1 por segundo) en un CSV para compartir. */
+    fun exportCsv(): File? {
+        val rows = synchronized(csv) { csv.toList() }
+        if (rows.isEmpty()) return null
+        val f = File(getApplication<Application>().cacheDir, "toledo_obd_datos.csv")
+        f.bufferedWriter().use { w ->
+            val st = _settings.value
+            w.appendLine("# Toledo OBD · motor: ${st.engine.label} · calibración: ${st.calibration} · carga retención: ${st.loadOffset ?: "sin aprender"}")
+            w.appendLine("# ${supportedInfo}")
+            w.appendLine("hora,rpm,kmh,carga_pct,turbo_bar,maf_gs,refrigerante_c,l_h,l_100km,marcha")
+            rows.forEach { w.appendLine(it) }
+        }
+        return f
+    }
+
+    fun relearnLoadOffset() {
+        offsetLearner.reset()
+        saveSettings(_settings.value.copy(loadOffset = null))
     }
 
     fun resetTrip() {
@@ -438,6 +493,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         calibration = prefs.getFloat("calibration", 1f),
         fuelPrice = prefs.getFloat("fuelPrice", 1.55f),
         lastDevice = prefs.getString("lastDevice", null),
+        loadOffset = prefs.getFloat("loadOffset", -1f).takeIf { it >= 0f },
     )
 
     private fun saveSettings(s: Settings) {
@@ -447,6 +503,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putFloat("calibration", s.calibration)
             .putFloat("fuelPrice", s.fuelPrice)
             .putString("lastDevice", s.lastDevice)
+            .putFloat("loadOffset", s.loadOffset ?: -1f)
             .apply()
     }
 
@@ -481,6 +538,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private const val VOLTAGE = -1
         const val HISTORY_POINTS = 120
+        private const val CSV_MAX_ROWS = 7200
         private val OBD_HINTS = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "CAR")
     }
 }

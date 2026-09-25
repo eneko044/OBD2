@@ -127,6 +127,8 @@ fun SettingsSheet(
     onCalibration: (Float) -> Unit,
     onFuelPrice: (Float) -> Unit,
     onRefuel: (Float) -> Boolean,
+    onRelearn: () -> Unit,
+    onShareCsv: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showLog by remember { mutableStateOf(false) }
@@ -193,6 +195,18 @@ fun SettingsSheet(
         refuelMsg?.let { Text(it, style = dim.copy(color = Dash.Amber), modifier = Modifier.padding(top = 4.dp)) }
 
         Spacer(Modifier.height(18.dp))
+        Caption("Cero de la carga motor")
+        Text(
+            settings.loadOffset?.let {
+                "Aprendido: la centralita marca %.1f %% sin inyectar (en retención). Se descuenta del cálculo.".format(it)
+            } ?: "Aún sin aprender. Conduciendo, suelta el acelerador con la marcha metida unos segundos y se aprende solo.",
+            style = dim,
+        )
+        TextButton(onClick = onRelearn) {
+            Text("VOLVER A APRENDER", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(18.dp))
         Caption("Precio del gasóleo (€/L)")
         OutlinedTextField(
             value = price,
@@ -206,6 +220,10 @@ fun SettingsSheet(
         )
 
         Spacer(Modifier.height(18.dp))
+        OutlinedButton(onClick = onShareCsv, modifier = Modifier.fillMaxWidth()) {
+            Text("COMPARTIR DATOS DEL VIAJE (CSV)", fontFamily = Rajdhani, fontWeight = FontWeight.Bold, color = Dash.Text)
+        }
+        Text("Últimas 2 horas, un registro por segundo.", style = dim)
         TextButton(onClick = { showLog = !showLog }) {
             Text(if (showLog) "OCULTAR REGISTRO OBD" else "VER REGISTRO OBD (diagnóstico)", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
         }

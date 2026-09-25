@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -109,6 +110,8 @@ class MainActivity : ComponentActivity() {
                         onCalibration = vm::setCalibration,
                         onFuelPrice = vm::setFuelPrice,
                         onRefuel = vm::calibrateWithRefuel,
+                        onRelearn = vm::relearnLoadOffset,
+                        onShareCsv = { shareCsv() },
                         onDismiss = { showSettings = false },
                     )
                 }
@@ -122,6 +125,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun shareCsv() {
+        val file = vm.exportCsv()
+        if (file == null) {
+            Toast.makeText(this, "Aún no hay datos registrados: conéctate y conduce un rato", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "Datos OBD Toledo")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, "Compartir datos del viaje"))
     }
 
     private fun hasBtPermission(): Boolean =

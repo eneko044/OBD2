@@ -94,24 +94,26 @@ object FuelModel {
 class LoadOffsetLearner(initial: Float?) {
     var offset: Float? = initial
         private set
-    private var prevSpeed = 0f
+    private var lastSpeed = -1f
+    private var slowingDown = false
     private var streak = 0
     private var streakMax = 0f
 
     /** Devuelve true si el valor aprendido ha cambiado. */
     fun feed(d: LiveData): Boolean {
+        // La velocidad no se lee en todos los ciclos: la tendencia se decide cuando cambia.
+        if (lastSpeed >= 0f && d.speed != lastSpeed) slowingDown = d.speed < lastSpeed
+        lastSpeed = d.speed
         val load = d.load
-        val decelerating = d.speed >= 25f && d.rpm >= 1200f && d.speed <= prevSpeed - 0.4f &&
-            (d.boostBar ?: 0f) < 0.15f
-        prevSpeed = d.speed
-        if (load == null || !decelerating) {
+        val coasting = slowingDown && d.speed >= 25f && d.rpm >= 1200f && (d.boostBar ?: 0f) < 0.15f
+        if (load == null || !coasting) {
             streak = 0
             return false
         }
         streakMax = if (streak == 0) load else maxOf(streakMax, load)
         streak++
-        // Tres lecturas seguidas decelerando: se toma la mayor de ellas para evitar picos sueltos.
-        if (streak >= 3 && (offset == null || streakMax < offset!! - 0.1f) && streakMax < 40f) {
+        // ~2 s seguidos en retención: se toma la mayor de esas lecturas para evitar picos sueltos.
+        if (streak >= 4 && (offset == null || streakMax < offset!! - 0.1f) && streakMax < 40f) {
             offset = streakMax
             return true
         }
@@ -121,6 +123,8 @@ class LoadOffsetLearner(initial: Float?) {
     fun reset() {
         offset = null
         streak = 0
+        lastSpeed = -1f
+        slowingDown = false
     }
 }
 

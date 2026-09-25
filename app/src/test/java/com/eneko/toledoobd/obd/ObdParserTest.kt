@@ -76,8 +76,12 @@ class ObdParserTest {
         repeat(5) { l.feed(LiveData(rpm = 2200f, speed = 100f, load = 35f)) }
         assertNull(l.offset)
         // retención: velocidad bajando con carga ~20 %
+        // retención con velocidad leída en ciclos alternos (se repite un ciclo sí y otro no)
         var v = 100f
-        repeat(5) { v -= 1.5f; l.feed(LiveData(rpm = 2100f, speed = v, load = 20.4f, mapKpa = 100f, baroKpa = 100f)) }
+        repeat(10) { i ->
+            if (i % 2 == 0) v -= 1f
+            l.feed(LiveData(rpm = 2100f, speed = v, load = 20.4f, mapKpa = 100f, baroKpa = 100f))
+        }
         assertEquals(20.4f, l.offset!!, 0.01f)
         // con el cero aprendido, en retención el consumo es 0 y al ralentí es bajo
         val s = Settings(loadOffset = l.offset)

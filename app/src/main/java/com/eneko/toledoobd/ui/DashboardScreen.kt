@@ -116,7 +116,7 @@ fun DashboardScreen(
 
     val rpmAnim = remember { Animatable(0f) }
     val speedAnim = remember { Animatable(0f) }
-    val needleSpring = spring<Float>(dampingRatio = 0.6f, stiffness = 110f)
+    val needleSpring = spring<Float>(dampingRatio = 0.75f, stiffness = 420f)
     LaunchedEffect(s.live.rpm, intro) {
         if (intro) rpmAnim.snapTo(0f) else rpmAnim.animateTo(s.live.rpm, needleSpring)
     }
@@ -302,7 +302,7 @@ private fun ConnectionPanel(s: DashState, onConnect: () -> Unit, onDemo: () -> U
 private fun ConsumptionPanel(s: DashState) {
     val moving = s.instL100 != null
     val target = s.instL100 ?: s.instLph
-    val shown by animateFloatAsState(target, tween(450), label = "cons")
+    val shown by animateFloatAsState(target, tween(180), label = "cons")
     val color = if (moving) consumptionColor(shown) else Dash.Text
     val avg = s.trip.avgL100
     Panel(Modifier.fillMaxWidth()) {
@@ -419,7 +419,11 @@ private fun HistoryPanel(s: DashState) {
 private fun Footer(s: DashState) {
     val proto = (s.conn as? ConnState.Connected)?.protocol
     Text(
-        listOfNotNull("Consumo: ${s.fuelSource.label}", proto).joinToString("  ·  "),
+        listOfNotNull(
+            "Consumo: ${s.fuelSource.label}",
+            proto,
+            if (s.updateHz > 0f && !s.demo) String.format(Locale.getDefault(), "%.1f lecturas/s", s.updateHz) else null,
+        ).joinToString("  ·  "),
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
         style = TextStyle(fontFamily = Rajdhani, fontSize = 12.sp, color = Dash.TextFaint),
     )

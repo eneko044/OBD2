@@ -62,6 +62,8 @@ data class DashState(
     val gear: Int? = null,
     val fuelSource: FuelSource = FuelSource.NONE,
     val ecuResponding: Boolean = true,
+    /** Lecturas completas (rpm + velocidad + consumo) por segundo. */
+    val updateHz: Float = 0f,
     val introKey: Int = 0,
 )
 
@@ -240,9 +242,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         var live = LiveData()
         var slowIdx = 0
         var rpmMisses = 0
+        var cycle = 0
+        var hz = 0f
         lastSampleAt = SystemClock.elapsedRealtime()
 
         while (currentCoroutineContext().isActive) {
+            val cycleStart = SystemClock.elapsedRealtime()
+            cycle++
             ioLock.withLock {
                 for (pid in fast) {
                     val b = obd.query(pid)
@@ -253,7 +259,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                         live = apply(live, pid, b)
                     }
                 }
-                if (slow.isNotEmpty()) {
+                // Los datos lentos (temperaturas, turbo, batería) solo cada 3 ciclos,
+                // para que rpm, velocidad y consumo se refresquen lo más rápido posible.
+                if (slow.isNotEmpty() && cycle % 3 == 0) {
                     val pid = slow[slowIdx % slow.size]
                     slowIdx++
                     if ((failures[pid] ?: 0) < 6) {
@@ -273,7 +281,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             }
             val responding = rpmMisses < 4
             if (!responding) live = live.copy(rpm = 0f, speed = 0f)
-            _state.update { it.copy(ecuResponding = responding) }
+            val ms = (SystemClock.elapsedRealtime() - cycleStart).coerceAtLeast(1)
+            hz = if (hz == 0f) 1000f / ms else hz + (1000f / ms - hz) * 0.2f
+            _state.update { it.copy(ecuResponding = responding, updateHz = hz) }
             onSample(live)
             if (!responding) delay(800)
         }
@@ -361,7 +371,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         smoothLph = when {
             live.rpm < 300f -> 0f
             smoothLph == 0f -> lph
-            else -> smoothLph + (lph - smoothLph) * 0.35f
+            else -> smoothLph + (lph - smoothLph) * 0.6f
         }
         val moving = live.speed >= 5f
         val l100 = if (moving) (smoothLph / live.speed * 100f).coerceAtMost(99.9f) else null

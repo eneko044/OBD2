@@ -72,11 +72,19 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
         private set
     val supported = mutableSetOf<Int>()
 
+    /**
+     * Si el adaptador acepta el sufijo "1" (número de respuestas esperadas) contesta nada más
+     * llegar la respuesta de la ECU, sin esperar su tiempo de espera. En línea K ahorra ~100-200 ms
+     * por lectura.
+     */
+    var fastReplies = false
+        private set
+
     suspend fun initialize(onStep: (String) -> Unit) {
         onStep("Reiniciando ELM327…")
         io.send("ATZ", 4000)
         delay(600)
-        for (c in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATAT1")) io.send(c, 1500)
+        for (c in listOf("ATE0", "ATL0", "ATS0", "ATH0", "ATAT2")) io.send(c, 1500)
         val version = io.send("ATI", 1500)
         log("Adaptador: $version")
 
@@ -108,10 +116,27 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
             supported += ObdParser.parseSupported(bytes, base)
         }
         log("PIDs soportados: " + supported.sorted().joinToString { "%02X".format(it) })
+
+        onStep("Optimizando velocidad de lectura…")
+        val t0 = System.currentTimeMillis()
+        val normal = ObdParser.parsePid(io.send("010C", 2000), 0x0C)
+        val tNormal = System.currentTimeMillis() - t0
+        val t1 = System.currentTimeMillis()
+        val quick = ObdParser.parsePid(io.send("010C1", 2000), 0x0C)
+        val tQuick = System.currentTimeMillis() - t1
+        fastReplies = quick != null
+        if (normal == null && quick == null) {
+            // Temporización agresiva demasiado justa para esta ECU: volver a la estándar.
+            io.send("ATAT1", 1500)
+            log("ATAT2 sin respuesta, vuelvo a ATAT1")
+        }
+        log("Lectura normal: $tNormal ms · rápida: $tQuick ms · modo rápido: ${if (fastReplies) "sí" else "no"}")
     }
 
-    suspend fun query(pid: Int, timeoutMs: Long = 2000): IntArray? =
-        ObdParser.parsePid(io.send("01%02X".format(pid), timeoutMs), pid)
+    suspend fun query(pid: Int, timeoutMs: Long = 2000): IntArray? {
+        val cmd = if (fastReplies) "01%02X1".format(pid) else "01%02X".format(pid)
+        return ObdParser.parsePid(io.send(cmd, timeoutMs), pid)
+    }
 
     suspend fun voltage(): Float? = ObdParser.parseVoltage(io.send("ATRV", 1500))
 

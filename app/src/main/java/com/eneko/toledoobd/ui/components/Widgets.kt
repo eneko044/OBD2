@@ -144,7 +144,7 @@ fun consumptionColor(l100: Float): Color = when {
 fun ConsumptionBar(value: Float, maxScale: Float, average: Float?, modifier: Modifier = Modifier) {
     val v by animateFloatAsState(
         (value / maxScale).coerceIn(0f, 1f),
-        spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow), label = "bar",
+        spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMedium), label = "bar",
     )
     val avg by animateFloatAsState(((average ?: 0f) / maxScale).coerceIn(0f, 1f), tween(700), label = "avg")
     Canvas(modifier.fillMaxWidth().height(22.dp)) {

@@ -60,12 +60,19 @@ class ObdParserTest {
     @Test
     fun fuelEstimateIsRealisticForTdi() {
         val s = Settings(engine = EnginePreset.ASV_STAGE1, loadOffset = 0.8f)
-        // Dato real del coche: 900 rpm, carga 22,7 % al ralentí
-        val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 22.7f), FuelSource.LOAD, s)
-        assertTrue("ralentí $idle", idle in 0.5f..1.1f)
-        val cruise = FuelModel.litersPerHour(LiveData(rpm = 2150f, speed = 100f, load = 26f), FuelSource.LOAD, s)
-        assertTrue("crucero $cruise", cruise in 3.5f..7f)
-        assertEquals(0f, FuelModel.litersPerHour(LiveData(rpm = 2000f, speed = 80f, load = 0.8f), FuelSource.LOAD, s), 0.001f)
+        // Datos reales del coche al ralentí: 900 rpm, carga 21 %, MAP 102 kPa, admisión 61 °C
+        val idle = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 21.2f, mapKpa = 102f, intakeTemp = 61f), FuelSource.LOAD, s)
+        assertTrue("ralentí $idle", idle in 0.5f..0.9f)
+        // 120 km/h en 5ª (≈2600 rpm), carga ~68 % (lo que daba 12,5 L/100), poco turbo
+        val cruise = FuelModel.litersPerHour(
+            LiveData(rpm = 2600f, speed = 120f, load = 68f, mapKpa = 125f, intakeTemp = 30f), FuelSource.LOAD, s,
+        )
+        val l100 = cruise / 120f * 100f
+        assertTrue("crucero $l100", l100 in 5f..8f)
+        assertEquals(0f, FuelModel.litersPerHour(LiveData(rpm = 2000f, speed = 80f, load = 0.8f, mapKpa = 100f), FuelSource.LOAD, s), 0.001f)
+        // Sin dato de presión se usa la curva por rpm
+        val noMap = FuelModel.litersPerHour(LiveData(rpm = 900f, load = 22.7f), FuelSource.LOAD, s)
+        assertTrue("sin MAP $noMap", noMap in 0.5f..1.1f)
     }
 
     @Test

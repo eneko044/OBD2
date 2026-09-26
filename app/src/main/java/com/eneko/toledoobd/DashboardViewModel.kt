@@ -64,6 +64,8 @@ data class DashState(
     val ecuResponding: Boolean = true,
     /** Lecturas completas (rpm + velocidad + consumo) por segundo. */
     val updateHz: Float = 0f,
+    /** Cada cuántos ciclos llega una lectura nueva de velocidad. */
+    val speedEveryCycles: Int = 2,
     val introKey: Int = 0,
 )
 
@@ -234,9 +236,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             FuelSource.MAF -> Pid.MAF
             FuelSource.NONE -> null
         }
-        val alternate = listOfNotNull(Pid.SPEED, fuelPid)
+        // Con consumo por carga, la presión del colector (aire disponible) entra en la rotación rápida.
+        val mapFast = source == FuelSource.LOAD && Pid.MAP in sup
+        val alternate = listOfNotNull(Pid.SPEED, fuelPid, if (mapFast) Pid.MAP else null)
+        _state.update { it.copy(speedEveryCycles = alternate.size) }
         val slow = listOf(Pid.MAP, Pid.COOLANT, Pid.MAP, Pid.IAT, Pid.MAP, VOLTAGE, Pid.BARO)
             .filter { it == VOLTAGE || it in sup }
+            .filter { !(mapFast && it == Pid.MAP) }
         val failures = mutableMapOf<Int, Int>()
         var live = LiveData()
         var slowIdx = 0

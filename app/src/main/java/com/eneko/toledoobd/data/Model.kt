@@ -63,6 +63,24 @@ object FuelModel {
         else -> FuelSource.NONE
     }
 
+    /** Relación aire/gasoil mínima que permite el limitador de humos (λ ≈ 1,17). */
+    private const val SMOKE_AFR = 17f
+    private const val CYL_VOLUME_M3 = 0.000475f
+    private const val VOLUMETRIC_EFF = 0.85f
+
+    /** Aire que entra en cada cilindro por ciclo (mg), a partir de presión y temperatura de admisión. */
+    fun airPerStrokeMg(d: LiveData): Float? {
+        val map = d.mapKpa ?: return null
+        val tK = (d.intakeTemp ?: 30f) + 273.15f
+        return VOLUMETRIC_EFF * map * 1000f * CYL_VOLUME_M3 / (287f * tK) * 1_000_000f
+    }
+
+    fun maxInjectionMg(d: LiveData, s: Settings): Float {
+        val byCurve = s.engine.maxIqMg * FullLoadCurve.shape(d.rpm)
+        val air = airPerStrokeMg(d) ?: return byCurve
+        return minOf(air / SMOKE_AFR, s.engine.maxIqMg)
+    }
+
     fun litersPerHour(d: LiveData, source: FuelSource, s: Settings): Float {
         if (d.rpm < 300f) return 0f
         val lph = when (source) {
@@ -72,9 +90,10 @@ object FuelModel {
                 // La EDC15 no marca 0 % con inyección cero: se descuenta la carga de retención.
                 val zero = s.loadOffset ?: 0f
                 val frac = ((load - zero) / (100f - zero)).coerceIn(0f, 1f)
-                // En diésel el PID 04 es % del par (≈ inyección) máximo *a las rpm actuales*,
-                // así que se multiplica por la curva de plena carga, no por el máximo absoluto.
-                val iqMg = frac * s.engine.maxIqMg * FullLoadCurve.shape(d.rpm)
+                // La EDC15 da la carga como % de la inyección máxima permitida en ese momento,
+                // que la limita el aire que entra (limitador de humos). Con la presión del
+                // colector se calcula ese aire; si no hay dato, se usa la curva típica por rpm.
+                val iqMg = frac * maxInjectionMg(d, s)
                 val gramsPerSec = iqMg * d.rpm / 30f / 1000f
                 gramsPerSec * 3600f / DIESEL_DENSITY_G_PER_L
             }

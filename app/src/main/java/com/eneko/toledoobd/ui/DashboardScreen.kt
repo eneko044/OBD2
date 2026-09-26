@@ -126,9 +126,9 @@ fun DashboardScreen(
         else rpmAnim.animateTo(s.live.rpm, if (rpmMs == 0) needleSpring else tween(rpmMs, easing = LinearEasing))
     }
     LaunchedEffect(s.live.speed, intro) {
-        // La velocidad se lee en ciclos alternos: su tramo dura el doble.
+        // La velocidad no se lee en todos los ciclos: su tramo dura lo que tarda en repetirse.
         if (intro) speedAnim.snapTo(0f)
-        else speedAnim.animateTo(s.live.speed, if (rpmMs == 0) needleSpring else tween((rpmMs * 2).coerceAtMost(1200), easing = LinearEasing))
+        else speedAnim.animateTo(s.live.speed, if (rpmMs == 0) needleSpring else tween((rpmMs * s.speedEveryCycles).coerceAtMost(1600), easing = LinearEasing))
     }
     val rpmFrac = if (intro) sweep.value else rpmAnim.value / RPM_MAX
     val speedFrac = if (intro) sweep.value else speedAnim.value / SPEED_MAX

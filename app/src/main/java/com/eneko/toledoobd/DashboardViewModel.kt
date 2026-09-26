@@ -240,7 +240,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val mapFast = source == FuelSource.LOAD && Pid.MAP in sup
         val alternate = listOfNotNull(Pid.SPEED, fuelPid, if (mapFast) Pid.MAP else null)
         _state.update { it.copy(speedEveryCycles = alternate.size) }
-        val slow = listOf(Pid.MAP, Pid.COOLANT, Pid.MAP, Pid.IAT, Pid.MAP, VOLTAGE, Pid.BARO)
+        // El caudalímetro no entra en el cálculo, pero se registra (sirve para ver si la EGR actúa).
+        val slow = listOf(Pid.MAP, Pid.COOLANT, Pid.MAP, Pid.IAT, Pid.MAF, Pid.MAP, VOLTAGE, Pid.BARO)
             .filter { it == VOLTAGE || it in sup }
             .filter { !(mapFast && it == Pid.MAP) }
         val failures = mutableMapOf<Int, Int>()
@@ -419,7 +420,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     live.coolant?.let { "%.0f".format(Locale.US, it) } ?: "",
                     smoothLph, l100?.let { "%.1f".format(Locale.US, it) } ?: "",
                     GearEstimator.gear(live.rpm, live.speed)?.toString() ?: "",
-                )
+                ) + "," + listOf(
+                    live.intakeTemp?.let { "%.0f".format(Locale.US, it) },
+                    live.maf?.takeIf { live.rpm > 300f }?.let { "%.0f".format(Locale.US, it * 1000f / (live.rpm / 30f)) },
+                    FuelModel.airPerStrokeMg(live)?.let { "%.0f".format(Locale.US, it) },
+                ).joinToString(",") { it ?: "" }
             synchronized(csv) {
                 csv.addLast(row)
                 while (csv.size > CSV_MAX_ROWS) csv.removeFirst()
@@ -438,7 +443,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val st = _settings.value
             w.appendLine("# Toledo OBD · motor: ${st.engine.label} · calibración: ${st.calibration} · carga retención: ${st.loadOffset ?: "sin aprender"}")
             w.appendLine("# ${supportedInfo}")
-            w.appendLine("hora,rpm,kmh,carga_pct,turbo_bar,maf_gs,refrigerante_c,l_h,l_100km,marcha")
+            w.appendLine("hora,rpm,kmh,carga_pct,turbo_bar,maf_gs,refrigerante_c,l_h,l_100km,marcha,admision_c,aire_maf_mg,aire_map_mg")
             rows.forEach { w.appendLine(it) }
         }
         return f

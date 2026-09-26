@@ -27,6 +27,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.eneko.toledoobd.ui.DashboardScreen
 import com.eneko.toledoobd.ui.DevicePickerSheet
+import com.eneko.toledoobd.ui.DiagnosticSheet
 import com.eneko.toledoobd.ui.DtcSheet
 import com.eneko.toledoobd.ui.SettingsSheet
 import com.eneko.toledoobd.ui.theme.ToledoTheme
@@ -54,6 +55,8 @@ class MainActivity : ComponentActivity() {
                 var showPicker by remember { mutableStateOf(false) }
                 var showSettings by remember { mutableStateOf(false) }
                 var showDtc by remember { mutableStateOf(false) }
+                var showDiag by remember { mutableStateOf(false) }
+                val diag by vm.diag.collectAsStateWithLifecycle()
                 var devices by remember { mutableStateOf(emptyList<BtDevice>()) }
 
                 val openPicker = {
@@ -89,6 +92,7 @@ class MainActivity : ComponentActivity() {
                     onDisconnect = vm::disconnect,
                     onSettings = { showSettings = true },
                     onDtc = { showDtc = true },
+                    onDiag = { showDiag = true },
                     onResetTrip = vm::resetTrip,
                 )
 
@@ -113,6 +117,16 @@ class MainActivity : ComponentActivity() {
                         onRelearn = vm::relearnLoadOffset,
                         onShareCsv = { shareCsv() },
                         onDismiss = { showSettings = false },
+                    )
+                }
+                if (showDiag) {
+                    DiagnosticSheet(
+                        diag = diag,
+                        live = state.live,
+                        connected = state.conn is ConnState.Connected,
+                        onStart = vm::startDiagnostics,
+                        onStop = vm::stopDiagnostics,
+                        onDismiss = { showDiag = false },
                     )
                 }
                 if (showDtc) {

@@ -60,7 +60,7 @@ private val dim = TextStyle(fontFamily = Rajdhani, fontSize = 14.sp, color = Das
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DashSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun DashSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -78,7 +78,7 @@ private fun DashSheet(onDismiss: () -> Unit, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SheetTitle(text: String) {
+internal fun SheetTitle(text: String) {
     Text(text, style = TextStyle(fontFamily = Rajdhani, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Dash.Text))
     Spacer(Modifier.height(12.dp))
 }

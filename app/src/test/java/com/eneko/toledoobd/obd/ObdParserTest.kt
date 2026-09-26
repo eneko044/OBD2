@@ -97,6 +97,30 @@ class ObdParserTest {
     }
 
     @Test
+    fun diagnosticDetectsActiveEgr() {
+        fun maf(air: Float, rpm: Float) = air * rpm / 30f / 1000f
+        var st = com.eneko.toledoobd.data.Diagnostics.start(LiveData(coolant = 80f))
+        assertEquals(com.eneko.toledoobd.data.DiagStep.IDLE, st.step)
+        // Ralentí real del coche: ~280 mg de caudalímetro frente a ~435 esperados
+        repeat(25) {
+            st = com.eneko.toledoobd.data.Diagnostics.feed(
+                st, LiveData(rpm = 903f, load = 21f, mapKpa = 101f, intakeTemp = 35f, coolant = 80f, maf = maf(280f, 903f)), 0.8f,
+            )
+        }
+        assertEquals(com.eneko.toledoobd.data.DiagStep.ROAD, st.step)
+        // A plena carga el caudalímetro mide lo esperado (EGR cerrada)
+        repeat(8) {
+            val d = LiveData(rpm = 2800f, speed = 60f, load = 95f, mapKpa = 220f, baroKpa = 101f, intakeTemp = 40f, coolant = 85f)
+            val expected = FuelModel.airPerStrokeMg(d)!!
+            st = com.eneko.toledoobd.data.Diagnostics.feed(st, d.copy(maf = maf(expected * 0.97f, 2800f)), 0.8f)
+        }
+        assertEquals(com.eneko.toledoobd.data.DiagStep.DONE, st.step)
+        val v = com.eneko.toledoobd.data.Diagnostics.verdicts(st)
+        assertTrue(v.any { it.title == "EGR ACTIVA" })
+        assertTrue(v.any { it.title == "Caudalímetro correcto" })
+    }
+
+    @Test
     fun estimatesGear() {
         assertEquals(5, GearEstimator.gear(2165f, 100f))
         assertEquals(1, GearEstimator.gear(2000f, 18.6f))

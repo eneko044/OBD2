@@ -67,14 +67,14 @@ class DemoSimulator {
         val load = when {
             speed < 5f && !accelerating -> 11f + noise
             shiftPause > 0f -> 8f
-            accelerating -> 68f + noise * 6f + (if (gear <= 2) 10f else 0f)
+            accelerating -> 72f + noise * 5f + (if (gear <= 3) 16f else 0f)
             braking -> 0f
             else -> 9f + speed * 0.19f + noise * 2f
         }.coerceIn(0f, 100f)
 
         coolant = min(89f, coolant + dt * 0.9f)
         val boostKpa = if (rpm > 1500f) load * 1.35f * min(1f, (rpm - 1500f) / 700f) else load * 0.08f
-        return LiveData(
+        val base = LiveData(
             rpm = rpm,
             speed = speed,
             load = load,
@@ -84,5 +84,13 @@ class DemoSimulator {
             baroKpa = 101f,
             voltage = 14.1f + noise * 0.05f,
         )
+        // Caudalímetro simulado como el coche real: EGR activa al ralentí (~65 %), cerrada a plena carga.
+        val fresh = when {
+            load < 30f -> 0.65f
+            load > 60f -> 0.97f
+            else -> 0.82f
+        }
+        val air = FuelModel.airPerStrokeMg(base) ?: 0f
+        return base.copy(maf = air * fresh * rpm / 30f / 1000f)
     }
 }

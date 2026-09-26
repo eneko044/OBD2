@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -95,6 +96,7 @@ fun DashboardScreen(
     onDisconnect: () -> Unit,
     onSettings: () -> Unit,
     onDtc: () -> Unit,
+    onDiag: () -> Unit,
     onResetTrip: () -> Unit,
 ) {
     // ---- Animación de arranque: la escala se ilumina y las agujas barren a tope y vuelven.
@@ -178,7 +180,7 @@ fun DashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    TopBar(s, onConnect, onDisconnect, onSettings, onDtc, compact = true)
+                    TopBar(s, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = true)
                     ConnectionPanel(s, onConnect, onDemo)
                     GearIndicator(s.gear, shiftUp)
                     ConsumptionPanel(s)
@@ -197,7 +199,7 @@ fun DashboardScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TopBar(s, onConnect, onDisconnect, onSettings, onDtc, compact = false)
+                TopBar(s, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = false)
                 ConnectionPanel(s, onConnect, onDemo)
                 Box(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -240,6 +242,7 @@ private fun TopBar(
     onDisconnect: () -> Unit,
     onSettings: () -> Unit,
     onDtc: () -> Unit,
+    onDiag: () -> Unit,
     compact: Boolean,
 ) {
     val (dot, status) = when (val c = s.conn) {
@@ -260,6 +263,7 @@ private fun TopBar(
             )
             Text(status, style = TextStyle(fontFamily = Rajdhani, fontSize = 13.sp, color = Dash.TextDim), maxLines = 1)
         }
+        IconButton(onClick = onDiag) { Icon(Icons.Filled.Build, "Diagnóstico", tint = Dash.TextDim) }
         IconButton(onClick = onDtc) { Icon(Icons.Filled.Warning, "Averías", tint = Dash.Amber) }
         IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Ajustes", tint = Dash.TextDim) }
         if (s.conn is ConnState.Connected || s.conn is ConnState.Connecting) {

@@ -10,6 +10,8 @@ import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.eneko.toledoobd.data.DemoSimulator
+import com.eneko.toledoobd.data.DiagState
+import com.eneko.toledoobd.data.Diagnostics
 import com.eneko.toledoobd.data.EnginePreset
 import com.eneko.toledoobd.data.FuelModel
 import com.eneko.toledoobd.data.FuelSource
@@ -240,6 +242,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val mapFast = source == FuelSource.LOAD && Pid.MAP in sup
         val alternate = listOfNotNull(Pid.SPEED, fuelPid, if (mapFast) Pid.MAP else null)
         _state.update { it.copy(speedEveryCycles = alternate.size) }
+        val diagAlternate = listOfNotNull(Pid.SPEED, fuelPid, Pid.IAT.takeIf { it in sup })
         // El caudalímetro no entra en el cálculo, pero se registra (sirve para ver si la EGR actúa).
         val slow = listOf(Pid.MAP, Pid.COOLANT, Pid.MAP, Pid.IAT, Pid.MAF, Pid.MAP, VOLTAGE, Pid.BARO)
             .filter { it == VOLTAGE || it in sup }
@@ -256,7 +259,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             val cycleStart = SystemClock.elapsedRealtime()
             cycle++
             ioLock.withLock {
-                val fast = listOf(Pid.RPM, alternate[cycle % alternate.size])
+                // En modo diagnóstico se leen caudalímetro y presión del colector en cada ciclo,
+                // para comparar el aire de ambos en el mismo instante.
+                val fast = if (_diag.value.active && Pid.MAF in sup) {
+                    listOfNotNull(Pid.RPM, Pid.MAF, Pid.MAP.takeIf { it in sup }, diagAlternate[cycle % diagAlternate.size])
+                } else {
+                    listOf(Pid.RPM, alternate[cycle % alternate.size])
+                }
                 for (pid in fast) {
                     val b = obd.query(pid)
                     if (b == null) {
@@ -372,6 +381,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val now = SystemClock.elapsedRealtime()
         val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, 2.0)
         lastSampleAt = now
+        if (_diag.value.active) _diag.update { Diagnostics.feed(it, live, dt.toFloat()) }
 
         if (learnsLoadOffset() && offsetLearner.feed(live)) {
             log("Carga de retención aprendida: %.1f %%".format(offsetLearner.offset))
@@ -452,6 +462,20 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun relearnLoadOffset() {
         offsetLearner.reset()
         saveSettings(_settings.value.copy(loadOffset = null))
+    }
+
+    // ---------------------------------------------------------------- Diagnóstico
+
+    private val _diag = MutableStateFlow(DiagState())
+    val diag: StateFlow<DiagState> = _diag.asStateFlow()
+
+    fun startDiagnostics() {
+        _diag.value = Diagnostics.start(_state.value.live)
+        log("Modo diagnóstico iniciado")
+    }
+
+    fun stopDiagnostics() {
+        _diag.update { it.copy(active = false) }
     }
 
     fun resetTrip() {

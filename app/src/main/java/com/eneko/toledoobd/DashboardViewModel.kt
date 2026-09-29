@@ -20,6 +20,7 @@ import com.eneko.toledoobd.data.LiveData
 import com.eneko.toledoobd.data.LoadOffsetLearner
 import com.eneko.toledoobd.data.Settings
 import com.eneko.toledoobd.data.TripStats
+import com.eneko.toledoobd.obd.EcuSilentException
 import com.eneko.toledoobd.obd.ElmIo
 import com.eneko.toledoobd.obd.ObdSession
 import com.eneko.toledoobd.obd.Pid
@@ -148,54 +149,80 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         saveSettings(_settings.value.copy(lastDevice = address))
         job = viewModelScope.launch(Dispatchers.IO) {
-            var s: BluetoothSocket? = null
-            try {
-                _state.update { it.copy(conn = ConnState.Connecting("Conectando por Bluetooth…")) }
-                val mgr = getApplication<Application>().getSystemService(BluetoothManager::class.java)
-                val adapter = mgr?.adapter ?: throw IOException("Este móvil no tiene Bluetooth")
-                val device = adapter.getRemoteDevice(address)
-                val name = device.name ?: address
-                log("Conectando a $name ($address)")
-                s = openSocket(device)
-                socket = s
-                val obd = ObdSession(ElmIo(s.inputStream, s.outputStream, ::log), ::log)
-                ioLock.withLock {
-                    obd.initialize { step -> _state.update { it.copy(conn = ConnState.Connecting(step)) } }
-                }
-                session = obd
-                val source = FuelModel.source(obd.supported)
-                supportedInfo = "Protocolo ${obd.protocol} · PIDs soportados: " +
-                    obd.supported.sorted().joinToString(" ") { "%02X".format(it) }
-                log("Protocolo: ${obd.protocol} · consumo: ${source.label}")
-                _state.update {
-                    it.copy(
-                        conn = ConnState.Connected(name, obd.protocol),
-                        fuelSource = source,
-                        introKey = it.introKey + 1,
-                    )
-                }
-                pollLoop(obd, source)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                log("Error: ${e.message}")
-                _state.update { it.copy(conn = ConnState.Error(e.message ?: "Error de conexión")) }
-            } finally {
+            // Los ELM327 clon a veces cortan el enlace nada más conectar ("Broken pipe") o en marcha:
+            // se reintenta solo, cambiando el tipo de socket en cada intento.
+            var attempt = 0
+            while (isActive) {
+                var s: BluetoothSocket? = null
                 try {
-                    s?.close()
-                } catch (_: IOException) {
+                    _state.update {
+                        it.copy(conn = ConnState.Connecting(if (attempt == 0) "Conectando por Bluetooth…" else "Reintentando conexión ($attempt/$MAX_RETRIES)…"))
+                    }
+                    val mgr = getApplication<Application>().getSystemService(BluetoothManager::class.java)
+                    val adapter = mgr?.adapter ?: throw IOException("Este móvil no tiene Bluetooth")
+                    val device = adapter.getRemoteDevice(address)
+                    val name = device.name ?: address
+                    log("Conectando a $name ($address), intento ${attempt + 1}")
+                    s = openSocket(device, attempt)
+                    socket = s
+                    delay(400) // algunos clones necesitan un momento antes del primer comando
+                    val obd = ObdSession(ElmIo(s.inputStream, s.outputStream, ::log), ::log)
+                    ioLock.withLock {
+                        obd.initialize { step -> _state.update { it.copy(conn = ConnState.Connecting(step)) } }
+                    }
+                    session = obd
+                    attempt = 0
+                    val source = FuelModel.source(obd.supported)
+                    supportedInfo = "Protocolo ${obd.protocol} · PIDs soportados: " +
+                        obd.supported.sorted().joinToString(" ") { "%02X".format(it) }
+                    log("Protocolo: ${obd.protocol} · consumo: ${source.label}")
+                    _state.update {
+                        it.copy(
+                            conn = ConnState.Connected(name, obd.protocol),
+                            fuelSource = source,
+                            introKey = it.introKey + 1,
+                        )
+                    }
+                    pollLoop(obd, source)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log("Error: ${e.message}")
+                    attempt++
+                    if (e is EcuSilentException || attempt > MAX_RETRIES) {
+                        _state.update { it.copy(conn = ConnState.Error(friendlyError(e))) }
+                        break
+                    }
+                } finally {
+                    try {
+                        s?.close()
+                    } catch (_: IOException) {
+                    }
+                    if (socket === s) {
+                        socket = null
+                        session = null
+                    }
+                    withContext(NonCancellable) { saveTrip() }
                 }
-                if (socket === s) {
-                    socket = null
-                    session = null
-                }
-                withContext(NonCancellable) { saveTrip() }
+                delay(2000)
             }
         }
     }
 
+    private fun friendlyError(e: Exception): String {
+        val m = e.message.orEmpty().lowercase()
+        return when {
+            e is EcuSilentException -> e.message ?: "La centralita no responde"
+            "broken pipe" in m || "reset" in m || "closed" in m || "socket" in m ->
+                "Se cortó la conexión con el adaptador. Desenchúfalo 10 s del conector OBD, " +
+                    "cierra otras apps OBD y vuelve a conectar."
+            "timeout" in m || "timed out" in m -> "El adaptador no contesta. ¿Está enchufado y con el contacto puesto?"
+            else -> e.message ?: "Error de conexión"
+        }
+    }
+
     @SuppressLint("MissingPermission")
-    private fun openSocket(device: BluetoothDevice): BluetoothSocket {
+    private fun openSocket(device: BluetoothDevice, rotate: Int = 0): BluetoothSocket {
         try {
             getApplication<Application>().getSystemService(BluetoothManager::class.java)?.adapter?.cancelDiscovery()
         } catch (_: SecurityException) {
@@ -209,7 +236,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             },
         )
         var last: Exception? = null
-        for ((label, make) in attempts) {
+        val order = attempts.indices.map { attempts[(it + rotate) % attempts.size] }
+        for ((label, make) in order) {
             var s: BluetoothSocket? = null
             try {
                 s = make()
@@ -588,6 +616,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         private const val VOLTAGE = -1
         const val HISTORY_POINTS = 120
         private const val CSV_MAX_ROWS = 7200
+        private const val MAX_RETRIES = 3
         private val OBD_HINTS = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "CAR")
     }
 }

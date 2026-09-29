@@ -50,6 +50,9 @@ class ElmIo(
     }
 }
 
+/** El adaptador responde, pero la centralita del coche no (contacto quitado, protocolo…). */
+class EcuSilentException(msg: String) : IOException(msg)
+
 object Pid {
     const val LOAD = 0x04
     const val COOLANT = 0x05
@@ -102,7 +105,7 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
                 break
             }
         }
-        if (!ok) throw IOException("La centralita no responde. ¿Contacto puesto?")
+        if (!ok) throw EcuSilentException("La centralita no responde. ¿Contacto puesto?")
 
         val dpn = io.send("ATDPN", 1500).uppercase().replace("A", "").trim()
         isCan = dpn.firstOrNull()?.let { it in '6'..'9' || it in 'A'..'C' } ?: false

@@ -34,6 +34,24 @@ object ObdParser {
         return null
     }
 
+    /**
+     * PIDs soportados sumando las respuestas de todas las centralitas. En CAN (p. ej. BMW)
+     * contestan a la vez motor y caja, y la primera línea puede no ser la del motor.
+     */
+    fun parseSupportedAll(raw: String, base: Int): Set<Int>? {
+        val header = "41%02X".format(base)
+        var found = false
+        val out = mutableSetOf<Int>()
+        for (line in lines(raw)) {
+            val idx = line.indexOf(header)
+            if (idx < 0) continue
+            val bytes = parsePid(line, base) ?: continue
+            found = true
+            out += parseSupported(bytes, base)
+        }
+        return if (found) out else null
+    }
+
     /** Interpreta la máscara de PIDs soportados de 0100 / 0120 / 0140... */
     fun parseSupported(bytes: IntArray, base: Int): Set<Int> {
         val out = mutableSetOf<Int>()

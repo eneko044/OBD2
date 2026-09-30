@@ -27,23 +27,75 @@ enum class FuelSource(val label: String) {
     MAF("Estimado por caudalímetro"),
 }
 
-/** Variantes del 1.9 TDI montadas en el Toledo II (1999-2004). */
-enum class EnginePreset(val label: String, val maxIqMg: Float) {
-    ALH("1.9 TDI 90 CV (ALH/AGR)", 45f),
-    ASV("1.9 TDI 110 CV (ASV/AHF)", 52f),
-    ASV_STAGE1("1.9 TDI 110 CV Stage 1 (~140 CV)", 61f),
-    ASZ("1.9 TDI 130 CV (ASZ)", 58f),
-    ARL("1.9 TDI 150 CV (ARL)", 63f),
+/** Coches para los que está preparada la app. */
+enum class Vehicle(
+    val title: String,
+    val shortTitle: String,
+    val rpmMax: Float,
+    val rpmRed: Float,
+    val speedMax: Float,
+    /** Cilindrada de cada cilindro (L). */
+    val cylVolumeL: Float,
+) {
+    TOLEDO("SEAT TOLEDO 1.9 TDI", "TOLEDO TDI", 5000f, 4500f, 220f, 0.4745f),
+    BMW_E60("BMW 520d E60", "BMW 520d", 5000f, 4500f, 260f, 0.4988f),
+}
+
+/** Motores de cada coche. maxIqMg ≈ inyección máxima por cilindro y ciclo (orientativa). */
+enum class EnginePreset(val vehicle: Vehicle, val label: String, val maxIqMg: Float) {
+    ALH(Vehicle.TOLEDO, "1.9 TDI 90 CV (ALH/AGR)", 45f),
+    ASV(Vehicle.TOLEDO, "1.9 TDI 110 CV (ASV/AHF)", 52f),
+    ASV_STAGE1(Vehicle.TOLEDO, "1.9 TDI 110 CV Stage 1 (~140 CV)", 61f),
+    ASZ(Vehicle.TOLEDO, "1.9 TDI 130 CV (ASZ)", 58f),
+    ARL(Vehicle.TOLEDO, "1.9 TDI 150 CV (ARL)", 63f),
+    BMW_M47(Vehicle.BMW_E60, "2.0d 163 CV (M47N2, hasta 09/2007)", 68f),
+    BMW_N47(Vehicle.BMW_E60, "2.0d 177 CV (N47, desde 09/2007)", 72f),
+    ;
+
+    companion object {
+        fun defaultFor(v: Vehicle) = if (v == Vehicle.TOLEDO) ASV_STAGE1 else BMW_M47
+        fun of(v: Vehicle) = entries.filter { it.vehicle == v }
+    }
+}
+
+/**
+ * Cajas de cambio: km/h por cada 1000 rpm en cada marcha.
+ * Toledo: 02J con 205/55 R16. BMW: neumático de ~2,03 m de circunferencia (225/55 R16,
+ * 225/50 R17, 245/45 R17…) y grupo final estimado, por eso la marcha del BMW es orientativa.
+ */
+enum class Gearbox(val vehicle: Vehicle, val label: String, val kmhPer1000: FloatArray) {
+    TOLEDO_02J(Vehicle.TOLEDO, "Manual 5 velocidades (02J)", floatArrayOf(9.3f, 16.6f, 25.8f, 36.2f, 46.2f)),
+
+    // 5,14 · 2,83 · 1,79 · 1,26 · 1,00 · 0,83 con grupo ≈2,64
+    BMW_MANUAL(
+        Vehicle.BMW_E60, "Manual 6 velocidades (ZF S6-37)",
+        floatArrayOf(8.98f, 16.30f, 25.78f, 36.62f, 46.14f, 55.59f),
+    ),
+
+    // 4,17 · 2,34 · 1,52 · 1,14 · 0,87 · 0,69 con grupo ≈2,81
+    BMW_AUTO(
+        Vehicle.BMW_E60, "Automática 6 velocidades (ZF 6HP)",
+        floatArrayOf(10.40f, 18.52f, 28.52f, 38.02f, 49.82f, 62.82f),
+    ),
+    ;
+
+    companion object {
+        fun defaultFor(v: Vehicle) = entries.first { it.vehicle == v }
+        fun of(v: Vehicle) = entries.filter { it.vehicle == v }
+    }
 }
 
 data class Settings(
     val engine: EnginePreset = EnginePreset.ASV_STAGE1,
+    val gearbox: Gearbox = Gearbox.TOLEDO_02J,
     val calibration: Float = 1.0f,
     val fuelPrice: Float = 1.55f,
     val lastDevice: String? = null,
     /** Carga (%) que marca la ECU con inyección cero (en retención). null = aún sin aprender. */
     val loadOffset: Float? = null,
-)
+) {
+    val vehicle: Vehicle get() = engine.vehicle
+}
 
 /**
  * Cálculo de consumo para un diésel sin PID de caudal de combustible.
@@ -65,19 +117,18 @@ object FuelModel {
 
     /** Relación aire/gasoil mínima que permite el limitador de humos (λ ≈ 1,17). */
     private const val SMOKE_AFR = 17f
-    private const val CYL_VOLUME_M3 = 0.000475f
     private const val VOLUMETRIC_EFF = 0.85f
 
     /** Aire que entra en cada cilindro por ciclo (mg), a partir de presión y temperatura de admisión. */
-    fun airPerStrokeMg(d: LiveData): Float? {
+    fun airPerStrokeMg(d: LiveData, cylVolumeL: Float = Vehicle.TOLEDO.cylVolumeL): Float? {
         val map = d.mapKpa ?: return null
         val tK = (d.intakeTemp ?: 30f) + 273.15f
-        return VOLUMETRIC_EFF * map * 1000f * CYL_VOLUME_M3 / (287f * tK) * 1_000_000f
+        return VOLUMETRIC_EFF * map * 1000f * (cylVolumeL / 1000f) / (287f * tK) * 1_000_000f
     }
 
     fun maxInjectionMg(d: LiveData, s: Settings): Float {
         val byCurve = s.engine.maxIqMg * FullLoadCurve.shape(d.rpm)
-        val air = airPerStrokeMg(d) ?: return byCurve
+        val air = airPerStrokeMg(d, s.vehicle.cylVolumeL) ?: return byCurve
         return minOf(air / SMOKE_AFR, s.engine.maxIqMg)
     }
 
@@ -158,6 +209,12 @@ class LoadOffsetLearner(initial: Float?) {
         return false
     }
 
+    /** Cambia el valor de partida (al cambiar de coche). */
+    fun restore(value: Float?) {
+        reset()
+        offset = value
+    }
+
     fun reset() {
         offset = null
         streak = 0
@@ -166,26 +223,24 @@ class LoadOffsetLearner(initial: Float?) {
     }
 }
 
-/**
- * Marcha estimada a partir de la relación km/h por cada 1000 rpm
- * (caja 02J de 5 marchas, neumático 205/55 R16).
- */
+/** Marcha estimada a partir de la relación km/h por cada 1000 rpm y la tabla de la caja. */
 object GearEstimator {
-    private val kmhPer1000 = floatArrayOf(9.3f, 16.6f, 25.8f, 36.2f, 46.2f)
-
-    fun gear(rpm: Float, speed: Float): Int? {
+    fun gear(rpm: Float, speed: Float, box: Gearbox = Gearbox.TOLEDO_02J): Int? {
         if (speed < 4f || rpm < 600f) return null
+        val table = box.kmhPer1000
         val ratio = speed / (rpm / 1000f)
         var best = -1
         var bestErr = Float.MAX_VALUE
-        kmhPer1000.forEachIndexed { i, r ->
+        table.forEachIndexed { i, r ->
             val err = abs(ratio - r) / r
             if (err < bestErr) {
                 bestErr = err
                 best = i
             }
         }
-        return if (bestErr < 0.13f) best + 1 else null
+        // Tolerancia según lo juntas que estén las marchas (en 6 velocidades 5ª y 6ª están a ~20 %).
+        val minStep = (1 until table.size).minOf { table[it] / table[it - 1] } - 1f
+        return if (bestErr < minOf(0.13f, minStep * 0.45f)) best + 1 else null
     }
 }
 
@@ -246,6 +301,14 @@ object DtcInfo {
         "P0670" to "Relé de calentadores",
         "P1403" to "EGR: desviación de regulación (VAG)",
         "P1550" to "Presión de turbo: desviación de regulación (VAG)",
+        "P0045" to "Actuador del turbo: circuito",
+        "P0087" to "Presión del rail de combustible demasiado baja",
+        "P0088" to "Presión del rail de combustible demasiado alta",
+        "P0093" to "Fuga de combustible detectada",
+        "P2002" to "Filtro de partículas (DPF): eficiencia baja",
+        "P2452" to "Sensor presión diferencial del DPF",
+        "P2453" to "Sensor presión diferencial del DPF: rango",
+        "P2463" to "Filtro de partículas (DPF): exceso de hollín",
     )
 
     fun describe(code: String): String = known[code] ?: when (code.firstOrNull()) {

@@ -121,6 +121,32 @@ class ObdParserTest {
     }
 
     @Test
+    fun supportedPidsFromSeveralCanEcus() {
+        // Motor (7E8) y caja (7E9) contestan a 0100: se suman los dos.
+        val raw = "4100BE3EB811\r4100 80 00 00 01\r"
+        val sup = ObdParser.parseSupportedAll(raw, 0)!!
+        assertTrue(0x0C in sup)
+        assertTrue(0x0D in sup)
+        assertTrue(0x20 in sup) // solo lo anuncia la segunda centralita
+    }
+
+    @Test
+    fun bmwProfileUsesItsOwnGearboxAndDisplacement() {
+        val m = com.eneko.toledoobd.data.Gearbox.BMW_MANUAL
+        // 6ª a 120 km/h ≈ 2160 rpm; 5ª ≈ 2600 rpm
+        assertEquals(6, GearEstimator.gear(2160f, 120f, m))
+        assertEquals(5, GearEstimator.gear(2600f, 120f, m))
+        val bmw = Settings(engine = EnginePreset.BMW_M47, gearbox = m)
+        assertEquals(com.eneko.toledoobd.data.Vehicle.BMW_E60, bmw.vehicle)
+        // A 120 km/h en 6ª con carga media, consumo razonable para un 520d
+        val lph = FuelModel.litersPerHour(
+            LiveData(rpm = 2160f, speed = 120f, load = 45f, mapKpa = 150f, intakeTemp = 30f), FuelSource.LOAD, bmw,
+        )
+        val l100 = lph / 120f * 100f
+        assertTrue("520d a 120: $l100", l100 in 4.5f..9f)
+    }
+
+    @Test
     fun estimatesGear() {
         assertEquals(5, GearEstimator.gear(2165f, 100f))
         assertEquals(1, GearEstimator.gear(2000f, 18.6f))

@@ -1,6 +1,7 @@
 package com.eneko.toledoobd.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -48,7 +49,9 @@ import com.eneko.toledoobd.BtDevice
 import com.eneko.toledoobd.DtcState
 import com.eneko.toledoobd.data.DtcInfo
 import com.eneko.toledoobd.data.EnginePreset
+import com.eneko.toledoobd.data.Gearbox
 import com.eneko.toledoobd.data.Settings
+import com.eneko.toledoobd.data.Vehicle
 import com.eneko.toledoobd.ui.components.BigNumber
 import com.eneko.toledoobd.ui.components.Caption
 import com.eneko.toledoobd.ui.theme.Dash
@@ -123,7 +126,9 @@ fun SettingsSheet(
     settings: Settings,
     tripFuel: Double,
     log: List<String>,
+    onVehicle: (Vehicle) -> Unit,
     onEngine: (EnginePreset) -> Unit,
+    onGearbox: (Gearbox) -> Unit,
     onCalibration: (Float) -> Unit,
     onFuelPrice: (Float) -> Unit,
     onRefuel: (Float) -> Boolean,
@@ -139,8 +144,28 @@ fun SettingsSheet(
     DashSheet(onDismiss) {
         SheetTitle("Ajustes")
 
+        Caption("Coche")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Vehicle.entries.forEach { v ->
+                val sel = settings.vehicle == v
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .background(if (sel) Dash.Red.copy(alpha = 0.18f) else Dash.Panel, RoundedCornerShape(12.dp))
+                        .border(1.5.dp, if (sel) Dash.Red else Dash.Stroke, RoundedCornerShape(12.dp))
+                        .clickable { onVehicle(v) }
+                        .padding(12.dp),
+                ) {
+                    Text(v.shortTitle, style = body.copy(fontWeight = FontWeight.Bold, color = if (sel) Dash.Text else Dash.TextDim))
+                    Text(v.title, style = dim)
+                }
+            }
+        }
+        Text("Cada coche guarda su propio trayecto, calibración y ajustes.", style = dim, modifier = Modifier.padding(top = 4.dp))
+
+        Spacer(Modifier.height(14.dp))
         Caption("Motor")
-        EnginePreset.entries.forEach { e ->
+        EnginePreset.of(settings.vehicle).forEach { e ->
             Row(
                 Modifier.fillMaxWidth().clickable { onEngine(e) },
                 verticalAlignment = Alignment.CenterVertically,
@@ -157,6 +182,22 @@ fun SettingsSheet(
                 "Con el coche reprogramado cada mapa es distinto: calibra con un repostaje para que la cifra sea exacta.",
             style = dim,
         )
+
+        val boxes = Gearbox.of(settings.vehicle)
+        if (boxes.size > 1) {
+            Spacer(Modifier.height(14.dp))
+            Caption("Caja de cambios")
+            boxes.forEach { g ->
+                Row(Modifier.fillMaxWidth().clickable { onGearbox(g) }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = settings.gearbox == g, onClick = { onGearbox(g) },
+                        colors = RadioButtonDefaults.colors(selectedColor = Dash.Red),
+                    )
+                    Text(g.label, style = body)
+                }
+            }
+            Text("Se usa para saber en qué marcha vas. En el BMW es orientativa.", style = dim)
+        }
 
         Spacer(Modifier.height(18.dp))
         Caption("Calibración del consumo")

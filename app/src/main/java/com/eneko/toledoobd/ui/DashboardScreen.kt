@@ -59,7 +59,9 @@ import androidx.compose.ui.unit.sp
 import com.eneko.toledoobd.ConnState
 import com.eneko.toledoobd.DashState
 import com.eneko.toledoobd.DashboardViewModel
+import com.eneko.toledoobd.data.Gearbox
 import com.eneko.toledoobd.data.Settings
+import com.eneko.toledoobd.data.Vehicle
 import com.eneko.toledoobd.ui.components.AnalogGauge
 import com.eneko.toledoobd.ui.components.ArcMeter
 import com.eneko.toledoobd.ui.components.BigNumber
@@ -80,10 +82,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-private const val RPM_MAX = 5000f
-private const val RPM_RED = 4500f
-private const val SPEED_MAX = 220f
-
 private fun f1(v: Float) = String.format(Locale.getDefault(), "%.1f", v)
 private fun f2(v: Float) = String.format(Locale.getDefault(), "%.2f", v)
 
@@ -99,6 +97,13 @@ fun DashboardScreen(
     onDiag: () -> Unit,
     onResetTrip: () -> Unit,
 ) {
+    val vehicle = settings.vehicle
+    val RPM_MAX = vehicle.rpmMax
+    val RPM_RED = vehicle.rpmRed
+    val SPEED_MAX = vehicle.speedMax
+    val topGear = settings.gearbox.kmhPer1000.size
+    val manual = settings.gearbox != Gearbox.BMW_AUTO
+
     // ---- Animación de arranque: la escala se ilumina y las agujas barren a tope y vuelven.
     val sweep = remember { Animatable(0f) }
     val reveal = remember { Animatable(0f) }
@@ -134,7 +139,7 @@ fun DashboardScreen(
     }
     val rpmFrac = if (intro) sweep.value else rpmAnim.value / RPM_MAX
     val speedFrac = if (intro) sweep.value else speedAnim.value / SPEED_MAX
-    val shiftUp = !intro && (s.gear ?: 5) < 5 && s.live.rpm > 2700f
+    val shiftUp = manual && !intro && (s.gear ?: topGear) < topGear && s.live.rpm > 2700f
 
     var confirmReset by remember { mutableStateOf(false) }
 
@@ -180,7 +185,7 @@ fun DashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    TopBar(s, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = true)
+                    TopBar(s, vehicle, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = true)
                     ConnectionPanel(s, onConnect, onDemo)
                     GearIndicator(s.gear, shiftUp)
                     ConsumptionPanel(s)
@@ -199,7 +204,7 @@ fun DashboardScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TopBar(s, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = false)
+                TopBar(s, vehicle, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = false)
                 ConnectionPanel(s, onConnect, onDemo)
                 Box(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -238,6 +243,7 @@ fun DashboardScreen(
 @Composable
 private fun TopBar(
     s: DashState,
+    vehicle: Vehicle,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onSettings: () -> Unit,
@@ -257,7 +263,7 @@ private fun TopBar(
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                if (compact) "TOLEDO TDI" else "SEAT TOLEDO 1.9 TDI",
+                if (compact) vehicle.shortTitle else vehicle.title,
                 style = TextStyle(fontFamily = Orbitron, fontWeight = FontWeight.Bold, fontSize = if (compact) 13.sp else 15.sp, color = Dash.Text, letterSpacing = 1.sp),
                 maxLines = 1,
             )

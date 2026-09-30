@@ -16,10 +16,12 @@ import com.eneko.toledoobd.data.EnginePreset
 import com.eneko.toledoobd.data.FuelModel
 import com.eneko.toledoobd.data.FuelSource
 import com.eneko.toledoobd.data.GearEstimator
+import com.eneko.toledoobd.data.Gearbox
 import com.eneko.toledoobd.data.LiveData
 import com.eneko.toledoobd.data.LoadOffsetLearner
 import com.eneko.toledoobd.data.Settings
 import com.eneko.toledoobd.data.TripStats
+import com.eneko.toledoobd.data.Vehicle
 import com.eneko.toledoobd.obd.EcuSilentException
 import com.eneko.toledoobd.obd.ElmIo
 import com.eneko.toledoobd.obd.ObdSession
@@ -358,7 +360,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun startDemo() {
         stop()
         job = viewModelScope.launch {
-            val sim = DemoSimulator()
+            val st = _settings.value
+            val sim = DemoSimulator(st.gearbox.kmhPer1000, st.vehicle.cylVolumeL)
             _state.update {
                 it.copy(
                     trip = TripStats(),
@@ -409,7 +412,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val now = SystemClock.elapsedRealtime()
         val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, 2.0)
         lastSampleAt = now
-        if (_diag.value.active) _diag.update { Diagnostics.feed(it, live, dt.toFloat()) }
+        val st = _settings.value
+        if (_diag.value.active) _diag.update { Diagnostics.feed(it, live, dt.toFloat(), st.vehicle.cylVolumeL) }
 
         if (learnsLoadOffset() && offsetLearner.feed(live)) {
             log("Carga de retención aprendida: %.1f %%".format(offsetLearner.offset))
@@ -440,7 +444,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 instL100 = l100,
                 trip = trip,
                 history = history,
-                gear = GearEstimator.gear(live.rpm, live.speed),
+                gear = GearEstimator.gear(live.rpm, live.speed, st.gearbox),
             )
         }
         if (now - lastSaveAt > 15_000) {
@@ -457,11 +461,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     live.maf?.let { "%.1f".format(Locale.US, it) } ?: "",
                     live.coolant?.let { "%.0f".format(Locale.US, it) } ?: "",
                     smoothLph, l100?.let { "%.1f".format(Locale.US, it) } ?: "",
-                    GearEstimator.gear(live.rpm, live.speed)?.toString() ?: "",
+                    GearEstimator.gear(live.rpm, live.speed, st.gearbox)?.toString() ?: "",
                 ) + "," + listOf(
                     live.intakeTemp?.let { "%.0f".format(Locale.US, it) },
                     live.maf?.takeIf { live.rpm > 300f }?.let { "%.0f".format(Locale.US, it * 1000f / (live.rpm / 30f)) },
-                    FuelModel.airPerStrokeMg(live)?.let { "%.0f".format(Locale.US, it) },
+                    FuelModel.airPerStrokeMg(live, st.vehicle.cylVolumeL)?.let { "%.0f".format(Locale.US, it) },
                 ).joinToString(",") { it ?: "" }
             synchronized(csv) {
                 csv.addLast(row)
@@ -479,7 +483,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val f = File(getApplication<Application>().cacheDir, "toledo_obd_datos.csv")
         f.bufferedWriter().use { w ->
             val st = _settings.value
-            w.appendLine("# Toledo OBD · motor: ${st.engine.label} · calibración: ${st.calibration} · carga retención: ${st.loadOffset ?: "sin aprender"}")
+            w.appendLine("# ${st.vehicle.title} · motor: ${st.engine.label} · caja: ${st.gearbox.label} · calibración: ${st.calibration} · carga retención: ${st.loadOffset ?: "sin aprender"}")
             w.appendLine("# ${supportedInfo}")
             w.appendLine("hora,rpm,kmh,carga_pct,turbo_bar,maf_gs,refrigerante_c,l_h,l_100km,marcha,admision_c,aire_maf_mg,aire_map_mg")
             rows.forEach { w.appendLine(it) }
@@ -552,7 +556,28 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- Ajustes
 
-    fun setEngine(e: EnginePreset) = saveSettings(_settings.value.copy(engine = e))
+    fun setEngine(e: EnginePreset) {
+        if (e.vehicle != _settings.value.vehicle) setVehicle(e.vehicle)
+        saveSettings(_settings.value.copy(engine = e))
+    }
+
+    fun setGearbox(g: Gearbox) = saveSettings(_settings.value.copy(gearbox = g))
+
+    /**
+     * Cambia de coche. Cada coche guarda su propio trayecto, calibración, cero de carga, motor
+     * y caja, así que al cambiar se guarda lo del coche actual y se carga lo del nuevo.
+     */
+    fun setVehicle(v: Vehicle) {
+        if (v == _settings.value.vehicle) return
+        if (!_state.value.demo) saveTrip()
+        prefs.edit().putString("vehicle", v.name).apply()
+        val s = loadSettings()
+        _settings.value = s
+        offsetLearner.restore(s.loadOffset)
+        _state.update { it.copy(trip = if (it.demo) TripStats() else loadTrip(), history = emptyList(), gear = null) }
+        log("Coche seleccionado: ${v.title}")
+    }
+
     fun setCalibration(c: Float) = saveSettings(_settings.value.copy(calibration = c.coerceIn(0.5f, 2.0f)))
     fun setFuelPrice(p: Float) = saveSettings(_settings.value.copy(fuelPrice = p.coerceIn(0.5f, 4f)))
 
@@ -564,45 +589,63 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    private fun loadSettings() = Settings(
-        engine = EnginePreset.entries.firstOrNull { it.name == prefs.getString("engineName", null) }
-            ?: EnginePreset.ASV_STAGE1,
-        calibration = prefs.getFloat("calibration", 1f),
-        fuelPrice = prefs.getFloat("fuelPrice", 1.55f),
-        lastDevice = prefs.getString("lastDevice", null),
-        loadOffset = prefs.getFloat("loadOffset", -1f).takeIf { it >= 0f },
-    )
+    private fun currentVehicle(): Vehicle =
+        Vehicle.entries.firstOrNull { it.name == prefs.getString("vehicle", null) } ?: Vehicle.TOLEDO
+
+    /** Clave de ajustes propia de cada coche. El Toledo usa las claves de siempre (compatibles). */
+    private fun vk(v: Vehicle, name: String) = if (v == Vehicle.TOLEDO) name else "${v.name}_$name"
+
+    private fun loadSettings(): Settings {
+        val v = currentVehicle()
+        return Settings(
+            engine = EnginePreset.of(v).firstOrNull { it.name == prefs.getString(vk(v, "engineName"), null) }
+                ?: EnginePreset.defaultFor(v),
+            gearbox = Gearbox.of(v).firstOrNull { it.name == prefs.getString(vk(v, "gearbox"), null) }
+                ?: Gearbox.defaultFor(v),
+            calibration = prefs.getFloat(vk(v, "calibration"), 1f),
+            fuelPrice = prefs.getFloat("fuelPrice", 1.55f),
+            lastDevice = prefs.getString("lastDevice", null),
+            loadOffset = prefs.getFloat(vk(v, "loadOffset"), -1f).takeIf { it >= 0f },
+        )
+    }
 
     private fun saveSettings(s: Settings) {
         _settings.value = s
+        val v = s.vehicle
         prefs.edit()
-            .putString("engineName", s.engine.name)
-            .putFloat("calibration", s.calibration)
+            .putString("vehicle", v.name)
+            .putString(vk(v, "engineName"), s.engine.name)
+            .putString(vk(v, "gearbox"), s.gearbox.name)
+            .putFloat(vk(v, "calibration"), s.calibration)
             .putFloat("fuelPrice", s.fuelPrice)
             .putString("lastDevice", s.lastDevice)
-            .putFloat("loadOffset", s.loadOffset ?: -1f)
+            .putFloat(vk(v, "loadOffset"), s.loadOffset ?: -1f)
             .apply()
     }
 
-    private fun loadTrip() = TripStats(
-        distanceKm = prefs.getFloat("tripKm", 0f).toDouble(),
-        fuelL = prefs.getFloat("tripFuel", 0f).toDouble(),
-        timeS = prefs.getFloat("tripTime", 0f).toDouble(),
-        maxSpeed = prefs.getFloat("tripMax", 0f),
-        maxBoost = prefs.getFloat("tripMaxBoost", 0f),
-        maxRpm = prefs.getFloat("tripMaxRpm", 0f),
-    )
+    private fun loadTrip(): TripStats {
+        val v = currentVehicle()
+        return TripStats(
+            distanceKm = prefs.getFloat(vk(v, "tripKm"), 0f).toDouble(),
+            fuelL = prefs.getFloat(vk(v, "tripFuel"), 0f).toDouble(),
+            timeS = prefs.getFloat(vk(v, "tripTime"), 0f).toDouble(),
+            maxSpeed = prefs.getFloat(vk(v, "tripMax"), 0f),
+            maxBoost = prefs.getFloat(vk(v, "tripMaxBoost"), 0f),
+            maxRpm = prefs.getFloat(vk(v, "tripMaxRpm"), 0f),
+        )
+    }
 
     private fun saveTrip() {
         if (_state.value.demo) return
         val t = _state.value.trip
+        val v = _settings.value.vehicle
         prefs.edit()
-            .putFloat("tripKm", t.distanceKm.toFloat())
-            .putFloat("tripFuel", t.fuelL.toFloat())
-            .putFloat("tripTime", t.timeS.toFloat())
-            .putFloat("tripMax", t.maxSpeed)
-            .putFloat("tripMaxBoost", t.maxBoost)
-            .putFloat("tripMaxRpm", t.maxRpm)
+            .putFloat(vk(v, "tripKm"), t.distanceKm.toFloat())
+            .putFloat(vk(v, "tripFuel"), t.fuelL.toFloat())
+            .putFloat(vk(v, "tripTime"), t.timeS.toFloat())
+            .putFloat(vk(v, "tripMax"), t.maxSpeed)
+            .putFloat(vk(v, "tripMaxBoost"), t.maxBoost)
+            .putFloat(vk(v, "tripMaxRpm"), t.maxRpm)
             .apply()
     }
 

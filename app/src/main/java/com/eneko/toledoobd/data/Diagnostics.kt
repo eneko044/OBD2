@@ -52,10 +52,10 @@ object Diagnostics {
         coolantMax = live.coolant,
     )
 
-    fun feed(s: DiagState, d: LiveData, dtS: Float): DiagState {
+    fun feed(s: DiagState, d: LiveData, dtS: Float, cylVolumeL: Float = Vehicle.TOLEDO.cylVolumeL): DiagState {
         if (!s.active) return s
         val mafAir = mafAirMg(d)
-        val mapAir = FuelModel.airPerStrokeMg(d)
+        val mapAir = FuelModel.airPerStrokeMg(d, cylVolumeL)
         val ratio = if (mafAir != null && mapAir != null && mapAir > 0f) mafAir / mapAir else null
         var n = s.copy(
             lastRatio = ratio,

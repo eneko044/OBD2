@@ -98,9 +98,9 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
             onStep("Buscando protocolo: $name…")
             io.send("ATSP$code", 1500)
             val r = io.send("0100", 20000)
-            val bytes = ObdParser.parsePid(r, 0x00)
-            if (bytes != null) {
-                supported += ObdParser.parseSupported(bytes, 0x00)
+            val found = ObdParser.parseSupportedAll(r, 0x00)
+            if (found != null) {
+                supported += found
                 ok = true
                 break
             }
@@ -115,8 +115,7 @@ class ObdSession(private val io: ElmIo, private val log: (String) -> Unit) {
         var base = 0x00
         while (supported.contains(base + 0x20) && base < 0x60) {
             base += 0x20
-            val bytes = ObdParser.parsePid(io.send("01%02X".format(base), 4000), base) ?: break
-            supported += ObdParser.parseSupported(bytes, base)
+            supported += ObdParser.parseSupportedAll(io.send("01%02X".format(base), 4000), base) ?: break
         }
         log("PIDs soportados: " + supported.sorted().joinToString { "%02X".format(it) })
 

@@ -5,14 +5,16 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /** Genera datos de conducción creíbles para probar el panel sin coche. */
-class DemoSimulator {
+class DemoSimulator(
+    private val kmhPer1000: FloatArray = Gearbox.TOLEDO_02J.kmhPer1000,
+    private val cylVolumeL: Float = Vehicle.TOLEDO.cylVolumeL,
+) {
     private data class Leg(val targetKmh: Float, val holdS: Float)
 
     private val route = listOf(
         Leg(0f, 4f), Leg(50f, 12f), Leg(30f, 5f), Leg(60f, 10f), Leg(0f, 6f),
         Leg(90f, 10f), Leg(120f, 18f), Leg(100f, 8f), Leg(130f, 10f), Leg(70f, 8f), Leg(0f, 5f),
     )
-    private val kmhPer1000 = floatArrayOf(9.3f, 16.6f, 25.8f, 36.2f, 46.2f)
 
     private var leg = 0
     private var holdLeft = route[0].holdS
@@ -52,7 +54,7 @@ class DemoSimulator {
 
         // Cambio de marcha: sube a ~2600 rpm acelerando, baja por debajo de 1300.
         val rpmInGear = speed * 1000f / kmhPer1000[gear - 1]
-        if (accelerating && rpmInGear > 2600f && gear < 5) {
+        if (accelerating && rpmInGear > 2600f && gear < kmhPer1000.size) {
             gear++
             shiftPause = 0.35f
         } else if (rpmInGear < 1300f && gear > 1) {
@@ -90,7 +92,7 @@ class DemoSimulator {
             load > 60f -> 0.97f
             else -> 0.82f
         }
-        val air = FuelModel.airPerStrokeMg(base) ?: 0f
+        val air = FuelModel.airPerStrokeMg(base, cylVolumeL) ?: 0f
         return base.copy(maf = air * fresh * rpm / 30f / 1000f)
     }
 }

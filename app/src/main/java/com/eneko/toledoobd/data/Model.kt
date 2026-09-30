@@ -36,9 +36,20 @@ enum class Vehicle(
     val speedMax: Float,
     /** Cilindrada de cada cilindro (L). */
     val cylVolumeL: Float,
+    /** Ralentí normal con el motor caliente. */
+    val idleRpm: Float,
+    /** Fondo de escala del reloj del turbo y presión a partir de la que se avisa (bar relativos). */
+    val boostGaugeMax: Float,
+    val overboostBar: Float,
+    /** Consumo por debajo del cual se pinta verde y a partir del cual rojo (L/100 km). */
+    val ecoGood: Float,
+    val ecoBad: Float,
 ) {
-    TOLEDO("SEAT TOLEDO 1.9 TDI", "TOLEDO TDI", 5000f, 4500f, 220f, 0.4745f),
-    BMW_E60("BMW 520d E60", "BMW 520d", 5000f, 4500f, 260f, 0.4988f),
+    // 1.9 TDI VE: ralentí ~900, turbo de serie ~1,0 bar (Stage 1 ~1,3)
+    TOLEDO("SEAT TOLEDO 1.9 TDI", "TOLEDO TDI", 5000f, 4500f, 220f, 0.4745f, 900f, 2.0f, 1.6f, 5.5f, 9f),
+
+    // M47N2/N47 common rail: ralentí ~780, turbo de geometría variable hasta ~1,5 bar de serie
+    BMW_E60("BMW 520d E60", "BMW 520d", 5000f, 4500f, 260f, 0.4988f, 780f, 2.5f, 1.9f, 6.5f, 10f),
 }
 
 /** Motores de cada coche. maxIqMg ≈ inyección máxima por cilindro y ciclo (orientativa). */

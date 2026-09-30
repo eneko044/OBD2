@@ -188,8 +188,8 @@ fun DashboardScreen(
                     TopBar(s, vehicle, onConnect, onDisconnect, onSettings, onDtc, onDiag, compact = true)
                     ConnectionPanel(s, onConnect, onDemo)
                     GearIndicator(s.gear, shiftUp)
-                    ConsumptionPanel(s)
-                    MetersPanel(s)
+                    ConsumptionPanel(s, vehicle)
+                    MetersPanel(s, vehicle)
                     TripPanel(s, settings) { confirmReset = true }
                     HistoryPanel(s)
                     Footer(s)
@@ -217,8 +217,8 @@ fun DashboardScreen(
                         size = 56.dp,
                     )
                 }
-                ConsumptionPanel(s)
-                MetersPanel(s)
+                ConsumptionPanel(s, vehicle)
+                MetersPanel(s, vehicle)
                 TripPanel(s, settings) { confirmReset = true }
                 HistoryPanel(s)
                 Footer(s)
@@ -316,11 +316,11 @@ private fun ConnectionPanel(s: DashState, onConnect: () -> Unit, onDemo: () -> U
 }
 
 @Composable
-private fun ConsumptionPanel(s: DashState) {
+private fun ConsumptionPanel(s: DashState, vehicle: Vehicle) {
     val moving = s.instL100 != null
     val target = s.instL100 ?: s.instLph
     val shown by animateFloatAsState(target, tween(180), label = "cons")
-    val color = if (moving) consumptionColor(shown) else Dash.Text
+    val color = if (moving) consumptionColor(shown, vehicle.ecoGood, vehicle.ecoBad) else Dash.Text
     val avg = s.trip.avgL100
     Panel(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -335,7 +335,7 @@ private fun ConsumptionPanel(s: DashState) {
         ConsumptionBar(value = target, maxScale = 20f, average = if (moving) avg else null)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth()) {
-            StatTile("Media", avg?.let { f1(it) } ?: "--", "L/100", Modifier.weight(1f), accent = avg?.let { consumptionColor(it) } ?: Dash.Text)
+            StatTile("Media", avg?.let { f1(it) } ?: "--", "L/100", Modifier.weight(1f), accent = avg?.let { consumptionColor(it, vehicle.ecoGood, vehicle.ecoBad) } ?: Dash.Text)
             StatTile("Caudal", f2(s.instLph), "L/h", Modifier.weight(1f))
             StatTile("Carga", s.live.load?.let { "${it.toInt()}" } ?: "--", "%", Modifier.weight(1f))
         }
@@ -343,7 +343,7 @@ private fun ConsumptionPanel(s: DashState) {
 }
 
 @Composable
-private fun MetersPanel(s: DashState) {
+private fun MetersPanel(s: DashState, vehicle: Vehicle) {
     val l = s.live
     Panel(Modifier.fillMaxWidth()) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -354,7 +354,7 @@ private fun MetersPanel(s: DashState) {
                 listOf(Dash.Blue, Dash.Green, Dash.Amber, Dash.Red), size = meter,
             )
             ArcMeter(
-                l.boostBar, 0f, 2.0f, "Turbo", l.boostBar?.let { f2(it) } ?: "--", "bar",
+                l.boostBar, 0f, vehicle.boostGaugeMax, "Turbo", l.boostBar?.let { f2(it) } ?: "--", "bar",
                 listOf(Dash.RedDeep, Dash.Red, Dash.RedSoft), size = meter,
             )
             ArcMeter(
@@ -370,7 +370,7 @@ private fun MetersPanel(s: DashState) {
         val warning = when {
             l.voltage != null && l.rpm > 500f && l.voltage < 13.0f -> "Tensión baja con motor en marcha: revisa el alternador"
             l.coolant != null && l.coolant > 105f -> "Temperatura del motor alta"
-            (l.boostBar ?: 0f) > 1.6f -> "Sobrepresión de turbo: posible corte (P0234)"
+            (l.boostBar ?: 0f) > vehicle.overboostBar -> "Sobrepresión de turbo: posible corte (P0234)"
             l.coolant != null && l.rpm > 500f && l.coolant < 60f -> "Motor frío: evita pasar de 3000 rpm"
             else -> null
         }

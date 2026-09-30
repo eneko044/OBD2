@@ -70,7 +70,7 @@ object Diagnostics {
             DiagStep.WARM_UP ->
                 if ((d.coolant ?: 0f) >= WARM_C) n = n.copy(step = DiagStep.IDLE)
             DiagStep.IDLE ->
-                if (ratio != null && d.speed < 1f && d.rpm in 750f..1050f && load < 45f) {
+                if (ratio != null && d.speed < 1f && d.rpm in 650f..1100f && load < 45f) {
                     val l = n.idleRatios + ratio
                     n = n.copy(idleRatios = l, step = if (l.size >= IDLE_SAMPLES) DiagStep.ROAD else DiagStep.IDLE)
                 }

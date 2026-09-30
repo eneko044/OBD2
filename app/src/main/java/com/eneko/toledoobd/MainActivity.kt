@@ -25,6 +25,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.eneko.toledoobd.data.Gearbox
 import com.eneko.toledoobd.ui.DashboardScreen
 import com.eneko.toledoobd.ui.DevicePickerSheet
 import com.eneko.toledoobd.ui.DiagnosticSheet
@@ -126,6 +127,7 @@ class MainActivity : ComponentActivity() {
                         diag = diag,
                         live = state.live,
                         connected = state.conn is ConnState.Connected,
+                        automatic = settings.gearbox == Gearbox.BMW_AUTO,
                         onStart = vm::startDiagnostics,
                         onStop = vm::stopDiagnostics,
                         onDismiss = { showDiag = false },

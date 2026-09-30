@@ -361,7 +361,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         job = viewModelScope.launch {
             val st = _settings.value
-            val sim = DemoSimulator(st.gearbox.kmhPer1000, st.vehicle.cylVolumeL)
+            val sim = DemoSimulator(st.gearbox.kmhPer1000, st.vehicle.cylVolumeL, st.vehicle.idleRpm)
             _state.update {
                 it.copy(
                     trip = TripStats(),

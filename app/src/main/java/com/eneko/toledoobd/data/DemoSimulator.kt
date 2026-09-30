@@ -8,6 +8,7 @@ import kotlin.random.Random
 class DemoSimulator(
     private val kmhPer1000: FloatArray = Gearbox.TOLEDO_02J.kmhPer1000,
     private val cylVolumeL: Float = Vehicle.TOLEDO.cylVolumeL,
+    private val idleRpm: Float = Vehicle.TOLEDO.idleRpm,
 ) {
     private data class Leg(val targetKmh: Float, val holdS: Float)
 
@@ -63,8 +64,8 @@ class DemoSimulator(
         if (speed < 3f) gear = 1
 
         val noise = Random.nextFloat() * 2f - 1f
-        val rpm = if (speed < 5f) 870f + noise * 15f
-        else max(900f, speed * 1000f / kmhPer1000[gear - 1] + noise * 12f)
+        val rpm = if (speed < 5f) idleRpm + noise * 15f
+        else max(idleRpm + 30f,speed * 1000f / kmhPer1000[gear - 1] + noise * 12f)
 
         val load = when {
             speed < 5f && !accelerating -> 11f + noise

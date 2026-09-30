@@ -52,6 +52,7 @@ fun DiagnosticSheet(
     diag: DiagState,
     live: LiveData,
     connected: Boolean,
+    automatic: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onDismiss: () -> Unit,
@@ -76,7 +77,11 @@ fun DiagnosticSheet(
                 style = dim,
             )
             Spacer(Modifier.height(10.dp))
-            Text("Necesitas: el coche arrancado, la app conectada y una carretera donde acelerar a fondo en 3ª con seguridad.", style = dim)
+            Text(
+                "Necesitas: el coche arrancado, la app conectada y una carretera donde acelerar a fondo " +
+                    (if (automatic) "(desde unos 40 km/h)" else "en 3ª") + " con seguridad.",
+                style = dim,
+            )
             Spacer(Modifier.height(14.dp))
             Button(
                 onClick = onStart, enabled = connected, modifier = Modifier.fillMaxWidth(),
@@ -97,17 +102,24 @@ fun DiagnosticSheet(
         StepCard(
             number = 2, title = "Ralentí parado",
             state = stepState(diag, DiagStep.IDLE),
-            instructions = "Para el coche en un sitio seguro, punto muerto, sin tocar el acelerador ni encender " +
+            instructions = "Para el coche en un sitio seguro, " + (if (automatic) "palanca en P o N" else "punto muerto") +
+                ", sin tocar el acelerador ni encender " +
                 "cosas. Espera a que suene el pitido (unos 20 segundos).",
             extra = if (diag.step == DiagStep.IDLE) "Rpm ${live.rpm.toInt()} · velocidad ${live.speed.toInt()} km/h" else null,
             progress = diag.idleProgress,
         )
         StepCard(
-            number = 3, title = "Acelerón a fondo en 3ª",
+            number = 3, title = if (automatic) "Acelerón a fondo" else "Acelerón a fondo en 3ª",
             state = stepState(diag, DiagStep.ROAD),
-            instructions = "En una carretera despejada y respetando el límite: mete 3ª a unas 1500 rpm y pisa el " +
-                "acelerador A FONDO hasta ~3500 rpm. Repite 2 o 3 veces si hace falta, hasta que suene el pitido. " +
-                "No mires el móvil: la app avisa sola.",
+            instructions = "En una carretera despejada y respetando el límite: " +
+                (
+                    if (automatic) {
+                        "circulando a unos 40 km/h en D, pisa el acelerador A FONDO 3-4 segundos (la caja reducirá sola)."
+                    } else {
+                        "mete 3ª a unas 1500 rpm y pisa el acelerador A FONDO hasta ~3500 rpm."
+                    }
+                    ) +
+                " Repite 2 o 3 veces si hace falta, hasta que suene el pitido. No mires el móvil: la app avisa sola.",
             extra = if (diag.step == DiagStep.ROAD) {
                 "Carga ${live.load?.toInt() ?: "--"} % · turbo ${live.boostBar?.let { "%.2f".format(it) } ?: "--"} bar · rpm ${live.rpm.toInt()}"
             } else null,

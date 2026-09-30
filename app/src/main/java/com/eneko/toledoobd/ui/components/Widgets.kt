@@ -133,9 +133,9 @@ fun UnitText(text: String, modifier: Modifier = Modifier) {
 }
 
 /** Color del consumo: verde eficiente, ámbar normal, rojo alto. */
-fun consumptionColor(l100: Float): Color = when {
-    l100 < 5.5f -> Dash.Green
-    l100 < 9f -> Dash.Amber
+fun consumptionColor(l100: Float, good: Float = 5.5f, bad: Float = 9f): Color = when {
+    l100 < good -> Dash.Green
+    l100 < bad -> Dash.Amber
     else -> Dash.Red
 }
 

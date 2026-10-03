@@ -5,7 +5,9 @@ import android.app.PictureInPictureParams
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import android.util.Rational
+import com.eneko.toledoobd.overlay.OverlayService
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -92,9 +94,12 @@ class MainActivity : ComponentActivity() {
 
                 // Ventana flotante: solo con el OBD (o la demo) conectado y si el usuario la tiene activada.
                 val connected = state.conn is ConnState.Connected
-                LaunchedEffect(settings.floatMode, connected) {
+                LaunchedEffect(settings.floatMode, connected, overlayGranted) {
+                    overlayWanted = connected && settings.floatMode != FloatMode.OFF
+                    // Con permiso para "mostrar sobre otras apps" se usa la ventana pequeña propia;
+                    // si no, la de imagen en imagen del sistema.
                     updatePip(
-                        allowed = connected && settings.floatMode != FloatMode.OFF,
+                        allowed = overlayWanted && !overlayGranted,
                         // Android fija el lado corto de la ventana; la proporción decide el ancho.
                         // Solo instantáneo: 4:3, lo justo para el número.
                         ratio = if (settings.floatMode == FloatMode.BOTH) Rational(2, 1) else Rational(4, 3),
@@ -154,6 +159,16 @@ class MainActivity : ComponentActivity() {
                         onShareCsv = { shareCsv() },
                         hasPip = hasPip,
                         onFloatMode = vm::setFloatMode,
+                        overlayGranted = overlayGranted,
+                        onRequestOverlay = {
+                            startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:$packageName"),
+                                ),
+                            )
+                        },
+                        onOverlayScale = vm::setOverlayScale,
                         onDismiss = { showSettings = false },
                     )
                 }
@@ -205,9 +220,34 @@ class MainActivity : ComponentActivity() {
         if (hasPip) runCatching { setPictureInPictureParams(pipParams()) }
     }
 
+    // ---------------------------------------------------------------- Ventana pequeña superpuesta
+
+    private var overlayGranted by mutableStateOf(false)
+    private var overlayWanted = false
+
+    override fun onStart() {
+        super.onStart()
+        // De vuelta en la app: fuera la ventana pequeña.
+        OverlayService.stop(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        overlayGranted = android.provider.Settings.canDrawOverlays(this)
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) OverlayService.stop(this)
+        super.onDestroy()
+    }
+
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        // En Android 8-11 hay que pedirlo a mano al salir de la app.
+        if (overlayWanted && overlayGranted) {
+            OverlayService.start(this)
+            return
+        }
+        // En Android 8-11 la imagen en imagen hay que pedirla a mano al salir de la app.
         if (hasPip && pipAllowed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
             runCatching { enterPictureInPictureMode(pipParams()) }
         }

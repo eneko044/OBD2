@@ -96,7 +96,13 @@ enum class Gearbox(val vehicle: Vehicle, val label: String, val kmhPer1000: Floa
     }
 }
 
-/** Qué muestra la ventana flotante (imagen en imagen) al salir de la app. */
+/** Tamaño en dp de la ventana pequeña superpuesta según lo que muestra y la escala elegida. */
+fun overlaySizeDp(mode: FloatMode, scale: Float): Pair<Float, Float> {
+    val w = if (mode == FloatMode.BOTH) 168f else 92f
+    return w * scale to 54f * scale
+}
+
+/** Qué muestra la ventana flotante al salir de la app. */
 enum class FloatMode(val label: String) {
     OFF("Desactivada"),
     INSTANT("Solo consumo instantáneo"),
@@ -106,6 +112,8 @@ enum class FloatMode(val label: String) {
 data class Settings(
     val engine: EnginePreset = EnginePreset.ASV_STAGE1,
     val floatMode: FloatMode = FloatMode.BOTH,
+    /** Tamaño de la ventana pequeña superpuesta (1 = normal). */
+    val overlayScale: Float = 1f,
     val gearbox: Gearbox = Gearbox.TOLEDO_02J,
     val calibration: Float = 1.0f,
     val fuelPrice: Float = 1.55f,

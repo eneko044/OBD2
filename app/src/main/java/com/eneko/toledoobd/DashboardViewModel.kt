@@ -36,6 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import com.eneko.toledoobd.overlay.OverlayBus
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -119,6 +121,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var supportedInfo = "sin conexión OBD"
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+
+    init {
+        // La ventana pequeña superpuesta lee de aquí cuando la app está en segundo plano.
+        viewModelScope.launch {
+            combine(_state, _settings) { s, st -> s to st }.collect { OverlayBus.data.value = it }
+        }
+    }
 
     private fun log(msg: String) {
         val line = "${timeFmt.format(Date())}  $msg"
@@ -610,6 +619,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ajusta la calibración con los litros reales repostados tras vaciar el depósito del trayecto. */
     fun setFloatMode(m: FloatMode) = saveSettings(_settings.value.copy(floatMode = m))
+    fun setOverlayScale(s: Float) = saveSettings(_settings.value.copy(overlayScale = s.coerceIn(0.6f, 1.6f)))
 
     fun setSpeedFactor(f: Float) = saveSettings(_settings.value.copy(speedFactor = f.coerceIn(0.8f, 1.25f)))
 
@@ -647,6 +657,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             loadOffset = prefs.getFloat(vk(v, "loadOffset"), -1f).takeIf { it >= 0f },
             speedFactor = prefs.getFloat(vk(v, "speedFactor"), 1f),
             floatMode = FloatMode.entries.firstOrNull { it.name == prefs.getString("floatMode", null) } ?: FloatMode.BOTH,
+            overlayScale = prefs.getFloat("overlayScale", 1f),
         )
     }
 
@@ -663,6 +674,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putFloat(vk(v, "loadOffset"), s.loadOffset ?: -1f)
             .putFloat(vk(v, "speedFactor"), s.speedFactor)
             .putString("floatMode", s.floatMode.name)
+            .putFloat("overlayScale", s.overlayScale)
             .apply()
     }
 

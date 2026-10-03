@@ -45,7 +45,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
 import com.eneko.toledoobd.BtDevice
+import com.eneko.toledoobd.ConnState
+import com.eneko.toledoobd.DashState
+import com.eneko.toledoobd.data.LiveData
+import com.eneko.toledoobd.data.TripStats
+import com.eneko.toledoobd.data.overlaySizeDp
 import com.eneko.toledoobd.DtcState
 import com.eneko.toledoobd.data.DtcInfo
 import com.eneko.toledoobd.data.EnginePreset
@@ -58,6 +66,14 @@ import com.eneko.toledoobd.ui.components.Caption
 import com.eneko.toledoobd.ui.theme.Dash
 import com.eneko.toledoobd.ui.theme.Rajdhani
 import java.util.Locale
+
+/** Datos de ejemplo para la vista previa de la ventana pequeña. */
+private val previewState = DashState(
+    conn = ConnState.Connected("OBD", ""),
+    live = LiveData(rpm = 2000f, speed = 90f),
+    instLph = 4.9f, instL100 = 5.4f,
+    trip = TripStats(distanceKm = 40.0, fuelL = 2.0),
+)
 
 private val body = TextStyle(fontFamily = Rajdhani, fontSize = 16.sp, color = Dash.Text)
 private val dim = TextStyle(fontFamily = Rajdhani, fontSize = 14.sp, color = Dash.TextDim)
@@ -141,6 +157,9 @@ fun SettingsSheet(
     onShareCsv: () -> Unit,
     hasPip: Boolean,
     onFloatMode: (FloatMode) -> Unit,
+    overlayGranted: Boolean,
+    onRequestOverlay: () -> Unit,
+    onOverlayScale: (Float) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showLog by remember { mutableStateOf(false) }
@@ -217,15 +236,42 @@ fun SettingsSheet(
                 Text(m.label, style = body)
             }
         }
-        Text(
-            if (hasPip) {
-                "Con el OBD conectado, al salir de la app (botón de inicio o al abrir Google Maps) queda una " +
-                    "ventanita con el consumo que puedes mover a cualquier esquina. Tócala y pulsa el icono de ampliar para volver al panel."
+        if (settings.floatMode != FloatMode.OFF) {
+            if (overlayGranted) {
+                Text(
+                    "Con el OBD conectado, al salir de la app (botón de inicio o al abrir Google Maps) queda una " +
+                        "ventana pequeña con el consumo. Arrástrala donde quieras; tócala para volver al panel.",
+                    style = dim,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Tamaño", style = body, modifier = Modifier.width(64.dp))
+                    Slider(
+                        value = settings.overlayScale, onValueChange = onOverlayScale, valueRange = 0.6f..1.6f,
+                        modifier = Modifier.weight(1f),
+                        colors = SliderDefaults.colors(thumbColor = Dash.Red, activeTrackColor = Dash.Red, inactiveTrackColor = Dash.Stroke),
+                    )
+                }
+                // Vista previa a tamaño real
+                val (wDp, hDp) = overlaySizeDp(settings.floatMode, settings.overlayScale)
+                val shape = RoundedCornerShape(12.dp)
+                Box(Modifier.fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(wDp.dp, hDp.dp).clip(shape).border(1.dp, Dash.Stroke, shape)) {
+                        PipView(previewState, settings)
+                    }
+                }
             } else {
-                "Este móvil no permite ventanas flotantes (imagen en imagen)."
-            },
-            style = dim.copy(color = if (hasPip) Dash.TextDim else Dash.Amber),
-        )
+                Text(
+                    "Para una ventana pequeña y de tamaño ajustable, permite \"Mostrar sobre otras apps\". " +
+                        "Sin ese permiso se usa la ventana de imagen en imagen de Android, cuyo tamaño mínimo pone el sistema.",
+                    style = dim,
+                )
+                TextButton(onClick = onRequestOverlay) {
+                    Text("PERMITIR VENTANA PEQUEÑA", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+                }
+                if (!hasPip) Text("Este móvil no permite imagen en imagen.", style = dim.copy(color = Dash.Amber))
+            }
+        }
 
         Spacer(Modifier.height(18.dp))
         Caption("Calibración del consumo")

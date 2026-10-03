@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -118,5 +119,6 @@ private fun Value(title: String, value: String, unit: String, color: Color, h: D
     }
 }
 
-/** Tamaño de letra proporcional a la altura de la ventana (la letra no sigue la escala del sistema). */
-private fun sp(h: Dp, k: Float) = (h.value * k).sp
+/** Tamaño de letra proporcional a la altura de la ventana (sin la escala de letra del sistema, para que quepa). */
+@Composable
+private fun sp(h: Dp, k: Float) = (h.value * k / LocalDensity.current.fontScale).sp

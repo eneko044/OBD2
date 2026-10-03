@@ -104,8 +104,19 @@ data class Settings(
     val lastDevice: String? = null,
     /** Carga (%) que marca la ECU con inyección cero (en retención). null = aún sin aprender. */
     val loadOffset: Float? = null,
+    /** Corrige la velocidad OBD (y con ella distancia y L/100) para que cuadre con los km reales. */
+    val speedFactor: Float = 1f,
 ) {
     val vehicle: Vehicle get() = engine.vehicle
+
+    companion object {
+        /** Nuevo factor de velocidad a partir de los km que contó la app y los reales del trayecto. */
+        fun speedFactorFrom(current: Float, appKm: Double, realKm: Float): Float? {
+            if (appKm < 5.0 || realKm <= 0f) return null
+            val f = (current * realKm / appKm).toFloat()
+            return f.takeIf { it in 0.8f..1.25f }
+        }
+    }
 }
 
 /**

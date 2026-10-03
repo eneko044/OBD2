@@ -426,7 +426,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- Cálculos
 
-    private fun onSample(live: LiveData) {
+    private fun onSample(raw: LiveData) {
+        // La velocidad OBD puede no coincidir con la real (en el Toledo da ~9 % menos): se corrige
+        // con el factor del coche, y con ella la distancia, el L/100 y la marcha.
+        val factor = _settings.value.speedFactor
+        val live = if (factor != 1f && !_state.value.demo) raw.copy(speed = raw.speed * factor) else raw
         val now = SystemClock.elapsedRealtime()
         // Hasta 45 s entre lecturas (cortes y reconexiones) se integra con la media de antes y después.
         val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, GAP_HOLD_MS / 1000.0)
@@ -604,6 +608,16 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun setFuelPrice(p: Float) = saveSettings(_settings.value.copy(fuelPrice = p.coerceIn(0.5f, 4f)))
 
     /** Ajusta la calibración con los litros reales repostados tras vaciar el depósito del trayecto. */
+    fun setSpeedFactor(f: Float) = saveSettings(_settings.value.copy(speedFactor = f.coerceIn(0.8f, 1.25f)))
+
+    /** Ajusta la velocidad/distancia con los km reales (cuentakilómetros o mapa) del trayecto actual. */
+    fun calibrateDistance(realKm: Float): Boolean {
+        val f = Settings.speedFactorFrom(_settings.value.speedFactor, _state.value.trip.distanceKm, realKm) ?: return false
+        setSpeedFactor(f)
+        log("Corrección de velocidad: ×%.3f".format(f))
+        return true
+    }
+
     fun calibrateWithRefuel(realLiters: Float): Boolean {
         val estimated = _state.value.trip.fuelL
         if (estimated < 1.0 || realLiters <= 0f) return false
@@ -628,6 +642,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             fuelPrice = prefs.getFloat("fuelPrice", 1.55f),
             lastDevice = prefs.getString("lastDevice", null),
             loadOffset = prefs.getFloat(vk(v, "loadOffset"), -1f).takeIf { it >= 0f },
+            speedFactor = prefs.getFloat(vk(v, "speedFactor"), 1f),
         )
     }
 
@@ -642,6 +657,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putFloat("fuelPrice", s.fuelPrice)
             .putString("lastDevice", s.lastDevice)
             .putFloat(vk(v, "loadOffset"), s.loadOffset ?: -1f)
+            .putFloat(vk(v, "speedFactor"), s.speedFactor)
             .apply()
     }
 

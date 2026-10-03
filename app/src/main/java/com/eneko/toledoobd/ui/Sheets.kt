@@ -132,6 +132,10 @@ fun SettingsSheet(
     onCalibration: (Float) -> Unit,
     onFuelPrice: (Float) -> Unit,
     onRefuel: (Float) -> Boolean,
+    tripKm: Double,
+    onRealKm: (Float) -> Boolean,
+    onSpeedFactor: (Float) -> Unit,
+    onResetSpeedFactor: () -> Unit,
     onRelearn: () -> Unit,
     onShareCsv: () -> Unit,
     onDismiss: () -> Unit,
@@ -234,6 +238,49 @@ fun SettingsSheet(
             ) { Text("AJUSTAR", fontFamily = Rajdhani, fontWeight = FontWeight.Bold) }
         }
         refuelMsg?.let { Text(it, style = dim.copy(color = Dash.Amber), modifier = Modifier.padding(top = 4.dp)) }
+
+        Spacer(Modifier.height(18.dp))
+        Caption("Corrección de velocidad y distancia")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "La velocidad que da el OBD puede no coincidir con la real. Tras un trayecto, escribe los km " +
+                    "reales (cuentakilómetros o mapa) y la app corrige velocidad, distancia y L/100.",
+                style = dim, modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(12.dp))
+            BigNumber("×" + String.format(Locale.getDefault(), "%.3f", settings.speedFactor), 16)
+        }
+        Slider(
+            value = settings.speedFactor, onValueChange = onSpeedFactor, valueRange = 0.85f..1.2f,
+            colors = SliderDefaults.colors(thumbColor = Dash.Red, activeTrackColor = Dash.Red, inactiveTrackColor = Dash.Stroke),
+        )
+        Text("También puedes moverlo a mano: si el cuadro marca 100 y la app 90, pon ×1,10.", style = dim)
+        Spacer(Modifier.height(8.dp))
+        var realKm by remember { mutableStateOf("") }
+        var kmMsg by remember { mutableStateOf<String?>(null) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = realKm, onValueChange = { realKm = it.replace(',', '.') },
+                label = { Text("Km reales (la app lleva %.1f)".format(tripKm)) }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f), colors = fieldColors(),
+            )
+            Spacer(Modifier.width(10.dp))
+            Button(
+                onClick = {
+                    val km = realKm.toFloatOrNull()
+                    kmMsg = if (km != null && onRealKm(km)) "Corrección aplicada. Reinicia el trayecto."
+                    else "Hacen falta al menos 5 km en el trayecto y una diferencia menor del 25 %"
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Dash.Red, contentColor = Color.White),
+            ) { Text("AJUSTAR", fontFamily = Rajdhani, fontWeight = FontWeight.Bold) }
+        }
+        kmMsg?.let { Text(it, style = dim.copy(color = Dash.Amber), modifier = Modifier.padding(top = 4.dp)) }
+        if (settings.speedFactor != 1f) {
+            TextButton(onClick = onResetSpeedFactor) {
+                Text("QUITAR CORRECCIÓN", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+        }
 
         Spacer(Modifier.height(18.dp))
         Caption("Cero de la carga motor")

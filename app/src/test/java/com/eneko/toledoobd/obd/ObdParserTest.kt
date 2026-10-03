@@ -147,6 +147,15 @@ class ObdParserTest {
     }
 
     @Test
+    fun speedFactorFromRealKm() {
+        // Prueba real del Toledo: la app contó 36,8 km y fueron ~40,5
+        val f = Settings.speedFactorFrom(1f, 36.8, 40.5f)!!
+        assertEquals(1.10f, f, 0.01f)
+        assertNull(Settings.speedFactorFrom(1f, 2.0, 3f)) // trayecto demasiado corto
+        assertNull(Settings.speedFactorFrom(1f, 40.0, 80f)) // diferencia absurda
+    }
+
+    @Test
     fun estimatesGear() {
         assertEquals(5, GearEstimator.gear(2165f, 100f))
         assertEquals(1, GearEstimator.gear(2000f, 18.6f))

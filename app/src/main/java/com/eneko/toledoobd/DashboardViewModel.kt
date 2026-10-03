@@ -108,6 +108,9 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private var lastHistoryAt = 0L
     private var lastSaveAt = 0L
     private var smoothLph = 0f
+    private var prevSpeed = 0f
+    private var prevLph = 0f
+    private var lastGoodAt = 0L
     private var autoConnectTried = false
     private val offsetLearner = LoadOffsetLearner(_settings.value.loadOffset)
     private val csv = ArrayDeque<String>()
@@ -283,7 +286,13 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         var rpmMisses = 0
         var cycle = 0
         var hz = 0f
-        lastSampleAt = SystemClock.elapsedRealtime()
+        // Tras una reconexión rápida se sigue contando desde la última lectura; si hace mucho, de cero.
+        if (SystemClock.elapsedRealtime() - lastSampleAt > GAP_HOLD_MS) {
+            lastSampleAt = SystemClock.elapsedRealtime()
+            prevSpeed = 0f
+            prevLph = 0f
+        }
+        lastGoodAt = SystemClock.elapsedRealtime()
 
         while (currentCoroutineContext().isActive) {
             val cycleStart = SystemClock.elapsedRealtime()
@@ -301,7 +310,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                     if (b == null) {
                         if (pid == Pid.RPM) rpmMisses++
                     } else {
-                        if (pid == Pid.RPM) rpmMisses = 0
+                        if (pid == Pid.RPM) {
+                            rpmMisses = 0
+                            lastGoodAt = SystemClock.elapsedRealtime()
+                        }
                         live = apply(live, pid, b)
                     }
                 }
@@ -330,7 +342,11 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 ioLock.withLock { obd.relaxTimeout() }
             }
             val responding = rpmMisses < 4
-            if (!responding) live = live.copy(rpm = 0f, speed = 0f)
+            // Un corte corto en marcha (adaptador o ECU que no contesta unos segundos) no significa que
+            // el coche se haya parado: se mantienen los últimos valores para no perder kilómetros.
+            if (!responding && SystemClock.elapsedRealtime() - lastGoodAt > GAP_HOLD_MS) {
+                live = live.copy(rpm = 0f, speed = 0f)
+            }
             val ms = (SystemClock.elapsedRealtime() - cycleStart).coerceAtLeast(1)
             hz = if (hz == 0f) 1000f / ms else hz + (1000f / ms - hz) * 0.2f
             _state.update { it.copy(ecuResponding = responding, updateHz = hz) }
@@ -374,6 +390,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
             lastSampleAt = SystemClock.elapsedRealtime()
+            prevSpeed = 0f
+            prevLph = 0f
             while (isActive) {
                 delay(200)
                 onSample(sim.step(0.2f))
@@ -410,7 +428,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun onSample(live: LiveData) {
         val now = SystemClock.elapsedRealtime()
-        val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, 2.0)
+        // Hasta 45 s entre lecturas (cortes y reconexiones) se integra con la media de antes y después.
+        val dt = ((now - lastSampleAt) / 1000.0).coerceIn(0.0, GAP_HOLD_MS / 1000.0)
         lastSampleAt = now
         val st = _settings.value
         if (_diag.value.active) _diag.update { Diagnostics.feed(it, live, dt.toFloat(), st.vehicle.cylVolumeL) }
@@ -429,7 +448,10 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         val moving = live.speed >= 5f
         val l100 = if (moving) (smoothLph / live.speed * 100f).coerceAtMost(99.9f) else null
 
-        val trip = cur.trip.add(live.speed, live.rpm, lph, live.boostBar, dt)
+        // Trapecio: distancia y gasoil con la media entre la lectura anterior y la actual.
+        val trip = cur.trip.add((prevSpeed + live.speed) / 2f, live.rpm, (prevLph + lph) / 2f, live.boostBar, dt)
+        prevSpeed = live.speed
+        prevLph = lph
 
         var history = cur.history
         if (now - lastHistoryAt >= 1000) {
@@ -660,6 +682,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         const val HISTORY_POINTS = 120
         private const val CSV_MAX_ROWS = 7200
         private const val MAX_RETRIES = 3
+        // Una reconexión por línea K (ATZ + búsqueda de protocolo + ajuste de tiempos) puede tardar ~30 s.
+        private const val GAP_HOLD_MS = 45_000L
         private val OBD_HINTS = listOf("OBD", "ELM", "V-LINK", "VLINK", "KONNWEI", "VGATE", "ICAR", "CAR")
     }
 }

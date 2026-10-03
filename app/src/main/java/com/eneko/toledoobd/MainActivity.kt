@@ -95,7 +95,9 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(settings.floatMode, connected) {
                     updatePip(
                         allowed = connected && settings.floatMode != FloatMode.OFF,
-                        ratio = if (settings.floatMode == FloatMode.BOTH) Rational(2, 1) else Rational(16, 9),
+                        // Android fija el lado corto de la ventana; la proporción decide el ancho.
+                        // Solo instantáneo: 4:3, lo justo para el número.
+                        ratio = if (settings.floatMode == FloatMode.BOTH) Rational(2, 1) else Rational(4, 3),
                     )
                 }
                 LaunchedEffect(inPip) {

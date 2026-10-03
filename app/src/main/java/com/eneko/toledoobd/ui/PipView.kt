@@ -55,7 +55,7 @@ fun PipView(s: DashState, settings: Settings) {
     ) {
         // Letra según alto y ancho de cada columna, para que "10,5" quepa en ventanas estrechas.
         val colW = if (settings.floatMode == FloatMode.BOTH) maxWidth / 2 else maxWidth
-        val h = minOf(maxHeight, colW * 0.75f)
+        val h = minOf(maxHeight, colW * 0.72f)
         // Línea roja arriba, como acento del panel
         Box(
             Modifier
@@ -101,16 +101,20 @@ fun PipView(s: DashState, settings: Settings) {
 
 @Composable
 private fun Value(title: String, value: String, unit: String, color: Color, h: Dp, modifier: Modifier) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    // Dos líneas: "AHORA · L/100" y el número grande, sin huecos de sobra.
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Text(
-            title,
+            "$title · $unit",
+            maxLines = 1,
             style = TextStyle(
-                fontFamily = Rajdhani, fontWeight = FontWeight.Bold, fontSize = sp(h, 0.14f),
+                fontFamily = Rajdhani, fontWeight = FontWeight.Bold, fontSize = sp(h, 0.15f),
                 color = Dash.TextDim, letterSpacing = 1.sp,
             ),
         )
-        Text(value, style = TextStyle(fontFamily = Orbitron, fontWeight = FontWeight.Black, fontSize = sp(h, 0.40f), color = color))
-        Text(unit, style = TextStyle(fontFamily = Rajdhani, fontWeight = FontWeight.SemiBold, fontSize = sp(h, 0.14f), color = Dash.TextDim))
+        Text(
+            value, maxLines = 1,
+            style = TextStyle(fontFamily = Orbitron, fontWeight = FontWeight.Black, fontSize = sp(h, 0.48f), color = color),
+        )
     }
 }
 

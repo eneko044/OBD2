@@ -49,6 +49,7 @@ import com.eneko.toledoobd.BtDevice
 import com.eneko.toledoobd.DtcState
 import com.eneko.toledoobd.data.DtcInfo
 import com.eneko.toledoobd.data.EnginePreset
+import com.eneko.toledoobd.data.FloatMode
 import com.eneko.toledoobd.data.Gearbox
 import com.eneko.toledoobd.data.Settings
 import com.eneko.toledoobd.data.Vehicle
@@ -138,6 +139,8 @@ fun SettingsSheet(
     onResetSpeedFactor: () -> Unit,
     onRelearn: () -> Unit,
     onShareCsv: () -> Unit,
+    hasPip: Boolean,
+    onFloatMode: (FloatMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showLog by remember { mutableStateOf(false) }
@@ -202,6 +205,27 @@ fun SettingsSheet(
             }
             Text("Se usa para saber en qué marcha vas. En el BMW es orientativa.", style = dim)
         }
+
+        Spacer(Modifier.height(18.dp))
+        Caption("Ventana flotante")
+        FloatMode.entries.forEach { m ->
+            Row(Modifier.fillMaxWidth().clickable { onFloatMode(m) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(
+                    selected = settings.floatMode == m, onClick = { onFloatMode(m) },
+                    colors = RadioButtonDefaults.colors(selectedColor = Dash.Red),
+                )
+                Text(m.label, style = body)
+            }
+        }
+        Text(
+            if (hasPip) {
+                "Con el OBD conectado, al salir de la app (botón de inicio o al abrir Google Maps) queda una " +
+                    "ventanita con el consumo que puedes mover a cualquier esquina. Tócala y pulsa el icono de ampliar para volver al panel."
+            } else {
+                "Este móvil no permite ventanas flotantes (imagen en imagen)."
+            },
+            style = dim.copy(color = if (hasPip) Dash.TextDim else Dash.Amber),
+        )
 
         Spacer(Modifier.height(18.dp))
         Caption("Calibración del consumo")

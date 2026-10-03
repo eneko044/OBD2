@@ -13,6 +13,7 @@ import com.eneko.toledoobd.data.DemoSimulator
 import com.eneko.toledoobd.data.DiagState
 import com.eneko.toledoobd.data.Diagnostics
 import com.eneko.toledoobd.data.EnginePreset
+import com.eneko.toledoobd.data.FloatMode
 import com.eneko.toledoobd.data.FuelModel
 import com.eneko.toledoobd.data.FuelSource
 import com.eneko.toledoobd.data.GearEstimator
@@ -608,6 +609,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     fun setFuelPrice(p: Float) = saveSettings(_settings.value.copy(fuelPrice = p.coerceIn(0.5f, 4f)))
 
     /** Ajusta la calibración con los litros reales repostados tras vaciar el depósito del trayecto. */
+    fun setFloatMode(m: FloatMode) = saveSettings(_settings.value.copy(floatMode = m))
+
     fun setSpeedFactor(f: Float) = saveSettings(_settings.value.copy(speedFactor = f.coerceIn(0.8f, 1.25f)))
 
     /** Ajusta la velocidad/distancia con los km reales (cuentakilómetros o mapa) del trayecto actual. */
@@ -643,6 +646,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             lastDevice = prefs.getString("lastDevice", null),
             loadOffset = prefs.getFloat(vk(v, "loadOffset"), -1f).takeIf { it >= 0f },
             speedFactor = prefs.getFloat(vk(v, "speedFactor"), 1f),
+            floatMode = FloatMode.entries.firstOrNull { it.name == prefs.getString("floatMode", null) } ?: FloatMode.BOTH,
         )
     }
 
@@ -658,6 +662,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putString("lastDevice", s.lastDevice)
             .putFloat(vk(v, "loadOffset"), s.loadOffset ?: -1f)
             .putFloat(vk(v, "speedFactor"), s.speedFactor)
+            .putString("floatMode", s.floatMode.name)
             .apply()
     }
 

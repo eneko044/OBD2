@@ -96,8 +96,16 @@ enum class Gearbox(val vehicle: Vehicle, val label: String, val kmhPer1000: Floa
     }
 }
 
+/** Qué muestra la ventana flotante (imagen en imagen) al salir de la app. */
+enum class FloatMode(val label: String) {
+    OFF("Desactivada"),
+    INSTANT("Solo consumo instantáneo"),
+    BOTH("Instantáneo + media"),
+}
+
 data class Settings(
     val engine: EnginePreset = EnginePreset.ASV_STAGE1,
+    val floatMode: FloatMode = FloatMode.BOTH,
     val gearbox: Gearbox = Gearbox.TOLEDO_02J,
     val calibration: Float = 1.0f,
     val fuelPrice: Float = 1.55f,

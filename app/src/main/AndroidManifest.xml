@@ -21,6 +21,8 @@
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:screenOrientation="fullUser"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.ToledoOBD">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

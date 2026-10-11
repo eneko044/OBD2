@@ -706,6 +706,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         stop()
+        // Sin panel no hay datos: que Android Auto y la ventana pequeña no enseñen valores viejos.
+        OverlayBus.data.value = null
         super.onCleared()
     }
 

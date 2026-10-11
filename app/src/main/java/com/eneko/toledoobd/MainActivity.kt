@@ -8,6 +8,9 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.util.Rational
 import com.eneko.toledoobd.overlay.OverlayService
+import com.eneko.toledoobd.auto.MediaAccessService
+import com.eneko.toledoobd.auto.MusicMirror
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -169,6 +172,13 @@ class MainActivity : ComponentActivity() {
                             )
                         },
                         onOverlayScale = vm::setOverlayScale,
+                        musicGranted = musicGranted,
+                        onRequestMusic = ::openMusicAccess,
+                        onAppInfo = {
+                            startActivity(
+                                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                            )
+                        },
                         onDismiss = { showSettings = false },
                     )
                 }
@@ -234,6 +244,22 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         overlayGranted = android.provider.Settings.canDrawOverlays(this)
+        musicGranted = MusicMirror.granted(this)
+    }
+
+    // ---------------------------------------------------------------- Android Auto: música + consumo
+
+    private var musicGranted by mutableStateOf(false)
+
+    private fun openMusicAccess() {
+        val direct = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
+                android.provider.Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                ComponentName(this, MediaAccessService::class.java).flattenToString(),
+            )
+        } else null
+        val list = Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        runCatching { startActivity(direct ?: list) }.onFailure { runCatching { startActivity(list) } }
     }
 
     override fun onDestroy() {

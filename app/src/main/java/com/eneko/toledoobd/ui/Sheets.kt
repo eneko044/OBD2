@@ -1,5 +1,6 @@
 package com.eneko.toledoobd.ui
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -160,6 +161,9 @@ fun SettingsSheet(
     overlayGranted: Boolean,
     onRequestOverlay: () -> Unit,
     onOverlayScale: (Float) -> Unit,
+    musicGranted: Boolean,
+    onRequestMusic: () -> Unit,
+    onAppInfo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showLog by remember { mutableStateOf(false) }
@@ -270,6 +274,41 @@ fun SettingsSheet(
                     Text("PERMITIR VENTANA PEQUEÑA", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
                 }
                 if (!hasPip) Text("Este móvil no permite imagen en imagen.", style = dim.copy(color = Dash.Amber))
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Caption("Android Auto")
+        Text(
+            "En Android Auto abre \"Consumo Toledo OBD\" desde el menú de apps: el consumo sale en la tarjeta " +
+                "de música junto a Google Maps. Deja esta app abierta en el móvil con el OBD conectado.",
+            style = dim,
+        )
+        Spacer(Modifier.height(6.dp))
+        if (musicGranted) {
+            Text(
+                "Música y consumo juntos: activado. La tarjeta muestra la canción de Spotify (o la que suene) " +
+                    "con el consumo arriba, y sus botones controlan la música.",
+                style = dim.copy(color = Dash.Green),
+            )
+        } else {
+            Text(
+                "Para ver Spotify y el consumo a la vez en la misma tarjeta, da a esta app \"acceso a notificaciones\" " +
+                    "(solo lo usa para saber qué canción suena).",
+                style = dim,
+            )
+            TextButton(onClick = onRequestMusic) {
+                Text("PERMITIR MÚSICA + CONSUMO", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Text(
+                    "Si el interruptor sale gris como \"ajuste restringido\": entra en Info de la app, menú ⋮ de arriba " +
+                        "a la derecha → \"Permitir ajustes restringidos\", y vuelve a probar.",
+                    style = dim.copy(color = Dash.Amber),
+                )
+                TextButton(onClick = onAppInfo) {
+                    Text("INFO DE LA APP", color = Dash.TextDim, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+                }
             }
         }
 

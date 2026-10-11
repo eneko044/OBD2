@@ -12,8 +12,8 @@ android {
         applicationId = "com.eneko.toledoobd"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "2.8"
+        versionCode = 20
+        versionName = "2.9"
     }
 
     signingConfigs {
@@ -59,6 +59,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
+    // Tarjeta de "lo que suena" en Android Auto con el consumo
+    implementation("androidx.media:media:1.7.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")

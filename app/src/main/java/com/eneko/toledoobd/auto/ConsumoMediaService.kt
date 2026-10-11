@@ -155,11 +155,14 @@ class ConsumoMediaService : MediaBrowserServiceCompat() {
             value = null
             unit = ""
         } else {
-            // El consumo de ahora ya va en grande en la imagen: el texto lleva la media y lo demás.
+            // Android Auto oscurece la imagen al lado del mapa: el consumo de ahora va también
+            // en el título, que siempre sale en blanco nítido.
             value = if (moving) s!!.instL100 else s!!.instLph
             unit = if (moving) "L/100" else "L/h"
-            title = "Media " + (avg?.let(ConsumoArt::fmt) ?: "--") + " L/100 · ${s.live.speed.toInt()} km/h"
+            val media = "Media " + (avg?.let(ConsumoArt::fmt) ?: "--")
+            title = if (moving) "Ahora ${ConsumoArt.fmt(value!!)} · $media L/100" else "Parado ${ConsumoArt.fmt(value!!)} L/h · $media"
             subtitle = buildList {
+                add("${s.live.speed.toInt()} km/h")
                 s.gear?.let { add("${it}ª marcha") }
                 if (s.trip.distanceKm >= 0.1) add(String.format(java.util.Locale.getDefault(), "%.1f km", s.trip.distanceKm))
                 if (s.trip.fuelL >= 0.01) add(String.format(java.util.Locale.getDefault(), "%.2f L", s.trip.fuelL))

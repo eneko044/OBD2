@@ -3,6 +3,7 @@ package com.eneko.toledoobd.auto
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.RectF
@@ -50,15 +51,17 @@ class ConsumoArt(context: Context) {
         val cx = s / 2
 
         c.drawColor(Dash.Bg.toArgb())
+        // Android Auto oscurece la carátula cuando la tarjeta va al lado del mapa:
+        // colores aclarados y más halo para que el número siga resaltando con ese velo.
         val color = when {
             value == null -> Dash.TextDim.toArgb()
-            moving -> consumptionColor(value, ecoGood, ecoBad).toArgb()
-            else -> Dash.Text.toArgb()
+            moving -> brighten(consumptionColor(value, ecoGood, ecoBad).toArgb(), 0.22f)
+            else -> Color.WHITE
         }
-        // Halo suave del color del consumo detrás del número
         paint.shader = RadialGradient(
-            cx, s * 0.3f, s * 0.48f,
-            intArrayOf(withAlpha(color, 0x38), withAlpha(color, 0)), null, Shader.TileMode.CLAMP,
+            cx, s * 0.3f, s * 0.5f,
+            intArrayOf(withAlpha(color, 0x70), withAlpha(color, 0x18), withAlpha(color, 0)),
+            floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP,
         )
         c.drawRect(0f, 0f, s, s * 0.62f, paint)
         paint.shader = null
@@ -66,8 +69,8 @@ class ConsumoArt(context: Context) {
         text.textAlign = Paint.Align.CENTER
         text.letterSpacing = 0.18f
         text.typeface = semi
-        text.textSize = s * 0.062f
-        text.color = Dash.TextDim.toArgb()
+        text.textSize = s * 0.066f
+        text.color = brighten(Dash.TextDim.toArgb(), 0.45f)
 
         if (value == null) {
             text.typeface = bold
@@ -83,27 +86,38 @@ class ConsumoArt(context: Context) {
         val number = fmt(value)
         text.letterSpacing = 0f
         text.typeface = bold
-        text.textSize = s * 0.30f
-        val numW = text.measureText(number)
         val unitPaint = Paint(text).apply {
-            typeface = semi
-            textSize = s * 0.075f
-            this.color = Dash.TextDim.toArgb()
+            typeface = bold
+            textSize = s * 0.085f
+            this.color = brighten(Dash.TextDim.toArgb(), 0.45f)
         }
         val unitW = unitPaint.measureText(unit)
         val gap = s * 0.025f
+        // Lo más grande que quepa, también con "12,8"
+        text.textSize = s * 0.36f
+        val maxW = s * 0.84f
+        if (text.measureText(number) + gap + unitW > maxW) {
+            text.textSize *= (maxW - gap - unitW) / text.measureText(number)
+        }
+        val numW = text.measureText(number)
         val left = cx - (numW + gap + unitW) / 2
         val base = s * 0.39f
         text.textAlign = Paint.Align.LEFT
         unitPaint.textAlign = Paint.Align.LEFT
         text.color = color
+        // Trazo extra para engordar la letra y brillo del mismo color alrededor
+        text.style = Paint.Style.FILL_AND_STROKE
+        text.strokeWidth = s * 0.008f
+        text.setShadowLayer(s * 0.05f, 0f, 0f, withAlpha(color, 0xB0))
         c.drawText(number, left, base, text)
+        text.clearShadowLayer()
+        text.style = Paint.Style.FILL
         c.drawText(unit, left + numW + gap, base, unitPaint)
 
         // Barra: consumo de ahora y una marca blanca en la media del trayecto
-        val bar = RectF(s * 0.14f, s * 0.465f, s * 0.86f, s * 0.49f)
+        val bar = RectF(s * 0.12f, s * 0.46f, s * 0.88f, s * 0.495f)
         val r = bar.height() / 2
-        paint.color = Dash.Stroke.toArgb()
+        paint.color = 0xFF2A2D35.toInt()
         c.drawRoundRect(bar, r, r, paint)
         if (moving) {
             paint.color = color
@@ -113,9 +127,15 @@ class ConsumoArt(context: Context) {
         average?.let {
             val x = bar.left + bar.width() * (it / scaleMax).coerceIn(0f, 1f)
             paint.color = Dash.Text.toArgb()
-            c.drawRoundRect(RectF(x - s * 0.006f, bar.top - s * 0.018f, x + s * 0.006f, bar.bottom + s * 0.018f), 2f, 2f, paint)
+            c.drawRoundRect(RectF(x - s * 0.009f, bar.top - s * 0.022f, x + s * 0.009f, bar.bottom + s * 0.022f), 2f, 2f, paint)
         }
         return bmp
+    }
+
+    /** Mezcla con blanco: misma tonalidad, más luz. */
+    private fun brighten(color: Int, k: Float): Int {
+        fun ch(v: Int) = (v + (255 - v) * k).toInt().coerceIn(0, 255)
+        return Color.rgb(ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
     }
 
     private fun withAlpha(color: Int, alpha: Int) = (color and 0x00FFFFFF) or (alpha shl 24)

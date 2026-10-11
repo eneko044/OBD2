@@ -149,51 +149,38 @@ class ConsumoMediaService : MediaBrowserServiceCompat() {
         val unit: String
         val moving = s?.instL100 != null
         val avg = s?.trip?.avgL100
-        val avgText = "media " + (avg?.let(ConsumoArt::fmt) ?: "--")
         if (!connected || v == null) {
             title = "Sin conexión OBD"
             subtitle = if (s == null) "Abre Toledo OBD en el móvil y conecta" else "Conecta el OBD en el móvil"
             value = null
             unit = ""
         } else {
-            val extra = buildList {
-                add("${avgText.replaceFirstChar { it.uppercase() }} L/100")
-                add("${s!!.live.speed.toInt()} km/h")
-                s.gear?.let { add("${it}ª") }
-            }.joinToString(" · ")
-            if (moving) {
-                value = s!!.instL100
-                unit = "L/100 km"
-                title = "${ConsumoArt.fmt(value!!)} L/100 km"
-            } else {
-                value = s!!.instLph
-                unit = "L/h"
-                title = "Parado · ${ConsumoArt.fmt(value)} L/h"
-            }
-            subtitle = extra
+            // El consumo de ahora ya va en grande en la imagen: el texto lleva la media y lo demás.
+            value = if (moving) s!!.instL100 else s!!.instLph
+            unit = if (moving) "L/100" else "L/h"
+            title = "Media " + (avg?.let(ConsumoArt::fmt) ?: "--") + " L/100 · ${s.live.speed.toInt()} km/h"
+            subtitle = buildList {
+                s.gear?.let { add("${it}ª marcha") }
+                if (s.trip.distanceKm >= 0.1) add(String.format(java.util.Locale.getDefault(), "%.1f km", s.trip.distanceKm))
+                if (s.trip.fuelL >= 0.01) add(String.format(java.util.Locale.getDefault(), "%.2f L", s.trip.fuelL))
+            }.joinToString(" · ").ifEmpty { v.shortTitle }
         }
 
-        // Con música: el título lleva el consumo y debajo va la canción.
-        val song = music.controller?.let { listOfNotNull(music.title, music.artist).joinToString(" — ") }
-        val songArt = music.art
+        // Con música: debajo va la canción (sin emojis, que la pantalla del coche pinta como "?").
+        val song = music.controller?.let { plain(listOfNotNull(music.title, music.artist).joinToString(" — ")) }
         if (!song.isNullOrBlank()) {
-            if (connected && value != null) {
-                title = if (moving) "${ConsumoArt.fmt(value)} L/100 · $avgText" else "Parado ${ConsumoArt.fmt(value)} L/h · $avgText"
-            } else {
-                title = "Sin OBD · abre Toledo OBD en el móvil"
-            }
+            if (!connected) title = "Sin OBD · abre Toledo OBD en el móvil"
             subtitle = song
         }
         applyState()
 
-        val key = "$title|$subtitle|${songArt?.let(System::identityHashCode)}"
+        val key = "$title|$subtitle|${value?.let(ConsumoArt::fmt)}|$moving"
         if (key == lastKey) return
         lastKey = key
 
         val bmp = art.draw(
-            background = songArt,
             value = value,
-            unit = unit.uppercase(),
+            unit = unit,
             average = avg,
             moving = moving,
             ecoGood = v?.ecoGood ?: 5.5f,
@@ -212,6 +199,22 @@ class ConsumoMediaService : MediaBrowserServiceCompat() {
                 .putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, bmp)
                 .build(),
         )
+    }
+
+    /** Quita emojis y símbolos que la pantalla de Android Auto no sabe pintar. */
+    private fun plain(t: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < t.length) {
+            val cp = t.codePointAt(i)
+            val type = Character.getType(cp)
+            val skip = type == Character.OTHER_SYMBOL.toInt() || type == Character.SURROGATE.toInt() ||
+                type == Character.PRIVATE_USE.toInt() || type == Character.UNASSIGNED.toInt() ||
+                cp == 0x200D || cp in 0xFE00..0xFE0F || cp in 0x1F3FB..0x1F3FF
+            if (!skip) sb.appendCodePoint(cp)
+            i += Character.charCount(cp)
+        }
+        return sb.toString().replace(Regex("\\s+"), " ").replace(Regex("\\(\\s+"), "(").trim()
     }
 
     private fun openApp() {

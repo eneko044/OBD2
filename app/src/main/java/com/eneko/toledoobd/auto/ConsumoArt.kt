@@ -26,7 +26,6 @@ class ConsumoArt(context: Context) {
 
     // Rajdhani: estrecha y sin el cero tachado de Orbitron, que en grande parecía una "Ø".
     private val bold: Typeface = font(context, R.font.rajdhani_bold)
-    private val semi: Typeface = font(context, R.font.rajdhani_semibold)
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val text = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -50,84 +49,69 @@ class ConsumoArt(context: Context) {
         val s = SIZE.toFloat()
         val cx = s / 2
 
-        c.drawColor(Dash.Bg.toArgb())
-        // Android Auto oscurece la carátula cuando la tarjeta va al lado del mapa:
-        // colores aclarados y más halo para que el número siga resaltando con ese velo.
+        // Android Auto pone un velo encima de la carátula (oscuro, o blanquecino de día).
+        // Lo que mejor aguanta ese velo es blanco puro sobre negro puro: el número va en blanco
+        // y el color del consumo (verde/ámbar/rojo) va en la etiqueta, el brillo y la barra.
+        c.drawColor(Color.BLACK)
         val color = when {
             value == null -> Dash.TextDim.toArgb()
-            moving -> brighten(consumptionColor(value, ecoGood, ecoBad).toArgb(), 0.22f)
+            moving -> consumptionColor(value, ecoGood, ecoBad).toArgb()
             else -> Color.WHITE
         }
         paint.shader = RadialGradient(
-            cx, s * 0.3f, s * 0.5f,
-            intArrayOf(withAlpha(color, 0x70), withAlpha(color, 0x18), withAlpha(color, 0)),
+            cx, s * 0.3f, s * 0.42f,
+            intArrayOf(withAlpha(color, 0x60), withAlpha(color, 0x14), withAlpha(color, 0)),
             floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP,
         )
         c.drawRect(0f, 0f, s, s * 0.62f, paint)
         paint.shader = null
 
         text.textAlign = Paint.Align.CENTER
-        text.letterSpacing = 0.18f
-        text.typeface = semi
-        text.textSize = s * 0.066f
-        text.color = brighten(Dash.TextDim.toArgb(), 0.45f)
-
+        text.typeface = bold
         if (value == null) {
-            text.typeface = bold
             text.textSize = s * 0.13f
             text.letterSpacing = 0.12f
+            text.color = 0xFFC8CCD4.toInt()
             c.drawText("SIN OBD", cx, s * 0.36f, text)
             return bmp
         }
 
-        c.drawText(if (moving) "AHORA" else "PARADO", cx, s * 0.13f, text)
+        // Etiqueta con la unidad, en el color del consumo: "AHORA · L/100"
+        text.letterSpacing = 0.15f
+        text.textSize = s * 0.072f
+        text.color = brighten(color, 0.15f)
+        c.drawText(if (moving) "AHORA · $unit" else "PARADO · $unit", cx, s * 0.105f, text)
 
-        // Número y unidad juntos y centrados: "5,4 L/100"
+        // Número solo y centrado: Android Auto recorta los lados de la carátula según la forma
+        // de la tarjeta, así que no debe pasar del 70 % central.
         val number = fmt(value)
         text.letterSpacing = 0f
-        text.typeface = bold
-        val unitPaint = Paint(text).apply {
-            typeface = bold
-            textSize = s * 0.085f
-            this.color = brighten(Dash.TextDim.toArgb(), 0.45f)
-        }
-        val unitW = unitPaint.measureText(unit)
-        val gap = s * 0.025f
-        // Lo más grande que quepa, también con "12,8"
-        text.textSize = s * 0.36f
-        val maxW = s * 0.84f
-        if (text.measureText(number) + gap + unitW > maxW) {
-            text.textSize *= (maxW - gap - unitW) / text.measureText(number)
-        }
-        val numW = text.measureText(number)
-        val left = cx - (numW + gap + unitW) / 2
-        val base = s * 0.39f
-        text.textAlign = Paint.Align.LEFT
-        unitPaint.textAlign = Paint.Align.LEFT
-        text.color = color
-        // Trazo extra para engordar la letra y brillo del mismo color alrededor
+        text.textSize = s * 0.40f
+        val maxW = s * 0.70f
+        val w0 = text.measureText(number)
+        if (w0 > maxW) text.textSize *= maxW / w0
+        text.color = Color.WHITE
         text.style = Paint.Style.FILL_AND_STROKE
-        text.strokeWidth = s * 0.008f
-        text.setShadowLayer(s * 0.05f, 0f, 0f, withAlpha(color, 0xB0))
-        c.drawText(number, left, base, text)
+        text.strokeWidth = s * 0.01f
+        text.setShadowLayer(s * 0.045f, 0f, 0f, withAlpha(color, 0xE0))
+        c.drawText(number, cx, s * 0.43f, text)
         text.clearShadowLayer()
         text.style = Paint.Style.FILL
-        c.drawText(unit, left + numW + gap, base, unitPaint)
 
-        // Barra: consumo de ahora y una marca blanca en la media del trayecto
-        val bar = RectF(s * 0.12f, s * 0.46f, s * 0.88f, s * 0.495f)
+        // Barra gruesa: consumo de ahora en su color y una marca blanca en la media del trayecto
+        val bar = RectF(s * 0.17f, s * 0.47f, s * 0.83f, s * 0.515f)
         val r = bar.height() / 2
-        paint.color = 0xFF2A2D35.toInt()
+        paint.color = 0xFF3A3D45.toInt()
         c.drawRoundRect(bar, r, r, paint)
         if (moving) {
             paint.color = color
-            val w = bar.width() * (value / scaleMax).coerceIn(0.03f, 1f)
+            val w = bar.width() * (value / scaleMax).coerceIn(0.05f, 1f)
             c.drawRoundRect(RectF(bar.left, bar.top, bar.left + w, bar.bottom), r, r, paint)
         }
         average?.let {
             val x = bar.left + bar.width() * (it / scaleMax).coerceIn(0f, 1f)
-            paint.color = Dash.Text.toArgb()
-            c.drawRoundRect(RectF(x - s * 0.009f, bar.top - s * 0.022f, x + s * 0.009f, bar.bottom + s * 0.022f), 2f, 2f, paint)
+            paint.color = Color.WHITE
+            c.drawRoundRect(RectF(x - s * 0.011f, bar.top - s * 0.025f, x + s * 0.011f, bar.bottom + s * 0.025f), 3f, 3f, paint)
         }
         return bmp
     }

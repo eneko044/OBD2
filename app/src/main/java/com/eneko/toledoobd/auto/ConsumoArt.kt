@@ -116,6 +116,45 @@ class ConsumoArt(context: Context) {
         return bmp
     }
 
+    /**
+     * Foto del "contacto" en la tarjeta de mensajes de Android Auto: círculo negro con el número
+     * en blanco y un aro del color del consumo.
+     */
+    fun avatar(value: Float, moving: Boolean, ecoGood: Float, ecoBad: Float): Bitmap {
+        val n = AVATAR
+        val bmp = Bitmap.createBitmap(n, n, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        val r = n / 2f
+        val color = if (moving) consumptionColor(value, ecoGood, ecoBad).toArgb() else Color.WHITE
+        paint.style = Paint.Style.FILL
+        paint.shader = null
+        paint.color = Color.BLACK
+        c.drawCircle(r, r, r, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = n * 0.09f
+        paint.color = color
+        c.drawCircle(r, r, r - paint.strokeWidth / 2, paint)
+        paint.style = Paint.Style.FILL
+
+        val number = fmt(value)
+        val t = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = bold
+            textAlign = Paint.Align.CENTER
+            this.color = Color.WHITE
+            textSize = n * 0.46f
+            style = Paint.Style.FILL_AND_STROKE
+            strokeWidth = n * 0.012f
+        }
+        val maxW = n * 0.68f
+        val w = t.measureText(number)
+        if (w > maxW) t.textSize *= maxW / w
+        // Centrado vertical con la altura real de las cifras
+        val bounds = android.graphics.Rect()
+        t.getTextBounds(number, 0, number.length, bounds)
+        c.drawText(number, r, r - (bounds.top + bounds.bottom) / 2f, t)
+        return bmp
+    }
+
     /** Mezcla con blanco: misma tonalidad, más luz. */
     private fun brighten(color: Int, k: Float): Int {
         fun ch(v: Int) = (v + (255 - v) * k).toInt().coerceIn(0, 255)
@@ -130,6 +169,7 @@ class ConsumoArt(context: Context) {
     companion object {
         /** Lado en píxeles: nítido en la pantalla del coche sin pasarse de tamaño al mandarla. */
         const val SIZE = 400
+        const val AVATAR = 192
 
         fun fmt(v: Float) = String.format(java.util.Locale.getDefault(), "%.1f", v)
     }

@@ -28,6 +28,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -163,6 +165,7 @@ fun SettingsSheet(
     onOverlayScale: (Float) -> Unit,
     musicGranted: Boolean,
     onRequestMusic: () -> Unit,
+    onAaMessage: (Boolean) -> Unit,
     onAppInfo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -310,6 +313,26 @@ fun SettingsSheet(
                     Text("INFO DE LA APP", color = Dash.TextDim, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
                 }
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(
+            Modifier.fillMaxWidth().clickable { onAaMessage(!settings.aaMessage) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Consumo como mensaje (experimental)", style = body)
+                Text(
+                    "Sale en la tarjeta de mensajes, encima de la música, como un WhatsApp: el contacto " +
+                        "se llama con el consumo y su foto es el número. Tócala y te lo lee en voz alta. " +
+                        "Así ves Spotify y el consumo a la vez. Solo funciona con el móvil en Android Auto.",
+                    style = dim,
+                )
+            }
+            Switch(
+                checked = settings.aaMessage, onCheckedChange = onAaMessage,
+                colors = SwitchDefaults.colors(checkedTrackColor = Dash.Red, checkedThumbColor = Dash.Text),
+            )
         }
 
         Spacer(Modifier.height(18.dp))

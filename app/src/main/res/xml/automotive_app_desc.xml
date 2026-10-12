@@ -2,4 +2,6 @@
 <!-- Android Auto: la app se presenta como fuente multimedia para que el consumo salga en la tarjeta junto a Maps -->
 <automotiveApp>
     <uses name="media" />
+    <!-- Tarjeta de mensajes: el consumo como si fuera un mensaje (opcional en ajustes) -->
+    <uses name="notification" />
 </automotiveApp>

@@ -86,6 +86,15 @@ class MainActivity : ComponentActivity() {
                     if (granted) afterPermission()
                     else Toast.makeText(this, "Sin permiso de Bluetooth no puedo leer el OBD", Toast.LENGTH_LONG).show()
                 }
+                val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                    if (!granted) Toast.makeText(this, "Sin permiso de notificaciones no sale en Android Auto", Toast.LENGTH_LONG).show()
+                }
+                val onAaMessage = { on: Boolean ->
+                    vm.setAaMessage(on)
+                    if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
                 val onConnect = {
                     if (hasBtPermission()) afterPermission()
                     else askPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
@@ -174,6 +183,7 @@ class MainActivity : ComponentActivity() {
                         onOverlayScale = vm::setOverlayScale,
                         musicGranted = musicGranted,
                         onRequestMusic = ::openMusicAccess,
+                        onAaMessage = onAaMessage,
                         onAppInfo = {
                             startActivity(
                                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),

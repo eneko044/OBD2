@@ -122,6 +122,8 @@ data class Settings(
     val loadOffset: Float? = null,
     /** Corrige la velocidad OBD (y con ella distancia y L/100) para que cuadre con los km reales. */
     val speedFactor: Float = 1f,
+    /** Android Auto: consumo también como "mensaje" en la tarjeta de encima de la música (experimental). */
+    val aaMessage: Boolean = false,
 ) {
     val vehicle: Vehicle get() = engine.vehicle
 

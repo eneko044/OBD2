@@ -12,8 +12,8 @@ android {
         applicationId = "com.eneko.toledoobd"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "2.12"
+        versionCode = 24
+        versionName = "2.13"
     }
 
     signingConfigs {
@@ -61,6 +61,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     // Tarjeta de "lo que suena" en Android Auto con el consumo
     implementation("androidx.media:media:1.7.0")
+    // Saber si el móvil está conectado a Android Auto
+    implementation("androidx.car.app:app:1.4.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")

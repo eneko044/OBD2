@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import com.eneko.toledoobd.overlay.OverlayBus
+import com.eneko.toledoobd.auto.ConsumoMessenger
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -122,10 +123,15 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
+    private val messenger = ConsumoMessenger(app).also { it.start() }
+
     init {
-        // La ventana pequeña superpuesta lee de aquí cuando la app está en segundo plano.
+        // La ventana pequeña superpuesta y Android Auto leen de aquí cuando la app está en segundo plano.
         viewModelScope.launch {
-            combine(_state, _settings) { s, st -> s to st }.collect { OverlayBus.data.value = it }
+            combine(_state, _settings) { s, st -> s to st }.collect {
+                OverlayBus.data.value = it
+                messenger.update(it.first, it.second)
+            }
         }
     }
 
@@ -619,6 +625,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ajusta la calibración con los litros reales repostados tras vaciar el depósito del trayecto. */
     fun setFloatMode(m: FloatMode) = saveSettings(_settings.value.copy(floatMode = m))
+    fun setAaMessage(on: Boolean) = saveSettings(_settings.value.copy(aaMessage = on))
     fun setOverlayScale(s: Float) = saveSettings(_settings.value.copy(overlayScale = s.coerceIn(0.6f, 1.6f)))
 
     fun setSpeedFactor(f: Float) = saveSettings(_settings.value.copy(speedFactor = f.coerceIn(0.8f, 1.25f)))
@@ -658,6 +665,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             speedFactor = prefs.getFloat(vk(v, "speedFactor"), 1f),
             floatMode = FloatMode.entries.firstOrNull { it.name == prefs.getString("floatMode", null) } ?: FloatMode.BOTH,
             overlayScale = prefs.getFloat("overlayScale", 1f),
+            aaMessage = prefs.getBoolean("aaMessage", false),
         )
     }
 
@@ -675,6 +683,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             .putFloat(vk(v, "speedFactor"), s.speedFactor)
             .putString("floatMode", s.floatMode.name)
             .putFloat("overlayScale", s.overlayScale)
+            .putBoolean("aaMessage", s.aaMessage)
             .apply()
     }
 
@@ -708,6 +717,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         stop()
         // Sin panel no hay datos: que Android Auto y la ventana pequeña no enseñen valores viejos.
         OverlayBus.data.value = null
+        messenger.stop()
         super.onCleared()
     }
 

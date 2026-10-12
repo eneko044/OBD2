@@ -60,6 +60,10 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".auto.MessageActionReceiver"
+            android:exported="false" />
+
         <service
             android:name=".overlay.OverlayService"
             android:exported="false"

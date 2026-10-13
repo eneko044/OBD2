@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import com.eneko.toledoobd.overlay.OverlayBus
 import com.eneko.toledoobd.auto.ConsumoMessenger
+import com.eneko.toledoobd.diag.ConnectionWatcher
+import com.eneko.toledoobd.diag.EventLog
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -124,6 +126,12 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
     private val messenger = ConsumoMessenger(app).also { it.start() }
+    private val watcher = ConnectionWatcher(app).also {
+        EventLog.init(app)
+        it.start()
+    }
+    private var lastConnKey: String? = null
+    private var lastBeatAt = 0L
 
     init {
         // La ventana pequeña superpuesta y Android Auto leen de aquí cuando la app está en segundo plano.
@@ -131,6 +139,7 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
             combine(_state, _settings) { s, st -> s to st }.collect {
                 OverlayBus.data.value = it
                 messenger.update(it.first, it.second)
+                trackConnection(it.first)
             }
         }
     }
@@ -138,7 +147,39 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private fun log(msg: String) {
         val line = "${timeFmt.format(Date())}  $msg"
         _log.update { (it + line).takeLast(250) }
+        EventLog.add("OBD", msg)
     }
+
+    /** Registro de conexiones: cambios de estado del OBD y un "sigo vivo" cada 30 s con el voltaje. */
+    private fun trackConnection(s: DashState) {
+        val key = when (val c = s.conn) {
+            ConnState.Idle -> "sin conectar"
+            is ConnState.Connecting -> "conectando: ${c.step}"
+            is ConnState.Connected -> "CONECTADO a ${c.device} (${c.protocol})"
+            is ConnState.Error -> "ERROR: ${c.message}"
+        } + if (s.conn is ConnState.Connected && !s.ecuResponding) " · la centralita NO RESPONDE" else ""
+        if (key != lastConnKey) {
+            lastConnKey = key
+            EventLog.add("OBD", "Estado: $key")
+        }
+        val now = System.currentTimeMillis()
+        if (s.conn is ConnState.Connected && now - lastBeatAt >= 30_000) {
+            lastBeatAt = now
+            EventLog.add("OBD", "Sigue conectado · %.1f lecturas/s · %s · %d rpm".format(
+                s.updateHz, s.live.voltage?.let { "%.1f V".format(it) } ?: "voltaje ?", s.live.rpm.toInt(),
+            ))
+        }
+    }
+
+    /** Marca en el registro el momento del fallo, con lo que se sabe en ese instante. */
+    fun markFailure() {
+        val s = _state.value
+        EventLog.add("MARCA", "######## FALLO MARCADO POR EL USUARIO ######## OBD: ${lastConnKey ?: "?"} · " +
+            "%.1f lecturas/s · %s".format(s.updateHz, s.live.voltage?.let { "%.1f V".format(it) } ?: "voltaje ?"))
+    }
+
+    fun exportEvents(): File? = EventLog.exportTo(getApplication<Application>().cacheDir)
+    fun clearEvents() = EventLog.clear()
 
     // ---------------------------------------------------------------- Bluetooth
 
@@ -718,6 +759,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
         // Sin panel no hay datos: que Android Auto y la ventana pequeña no enseñen valores viejos.
         OverlayBus.data.value = null
         messenger.stop()
+        watcher.stop()
+        EventLog.add("INFO", "App cerrada")
         super.onCleared()
     }
 

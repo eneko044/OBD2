@@ -10,6 +10,7 @@ import android.util.Rational
 import com.eneko.toledoobd.overlay.OverlayService
 import com.eneko.toledoobd.auto.MediaAccessService
 import com.eneko.toledoobd.auto.MusicMirror
+import com.eneko.toledoobd.diag.EventLog
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 val settings by vm.settings.collectAsStateWithLifecycle()
                 val log by vm.log.collectAsStateWithLifecycle()
                 val dtc by vm.dtc.collectAsStateWithLifecycle()
+                val events by EventLog.lines.collectAsStateWithLifecycle()
 
                 var showPicker by remember { mutableStateOf(false) }
                 var showSettings by remember { mutableStateOf(false) }
@@ -184,6 +186,13 @@ class MainActivity : ComponentActivity() {
                         musicGranted = musicGranted,
                         onRequestMusic = ::openMusicAccess,
                         onAaMessage = onAaMessage,
+                        events = events,
+                        onMarkFailure = {
+                            vm.markFailure()
+                            Toast.makeText(this, "Fallo marcado en el registro", Toast.LENGTH_SHORT).show()
+                        },
+                        onShareEvents = { shareEvents() },
+                        onClearEvents = vm::clearEvents,
                         onAppInfo = {
                             startActivity(
                                 Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
@@ -292,6 +301,22 @@ class MainActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPip = isInPictureInPictureMode
+    }
+
+    private fun shareEvents() {
+        val file = vm.exportEvents()
+        if (file == null) {
+            Toast.makeText(this, "El registro está vacío", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "Registro de conexiones Toledo OBD")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(send, "Compartir registro de conexiones"))
     }
 
     private fun shareCsv() {

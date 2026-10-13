@@ -166,10 +166,16 @@ fun SettingsSheet(
     musicGranted: Boolean,
     onRequestMusic: () -> Unit,
     onAaMessage: (Boolean) -> Unit,
+    events: List<String>,
+    onMarkFailure: () -> Unit,
+    onShareEvents: () -> Unit,
+    onClearEvents: () -> Unit,
     onAppInfo: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var showLog by remember { mutableStateOf(false) }
+    var showEvents by remember { mutableStateOf(false) }
+    var marked by remember { mutableStateOf(false) }
     var refuel by remember { mutableStateOf("") }
     var refuelMsg by remember { mutableStateOf<String?>(null) }
     var price by remember { mutableStateOf(String.format(Locale.US, "%.3f", settings.fuelPrice)) }
@@ -333,6 +339,49 @@ fun SettingsSheet(
                 checked = settings.aaMessage, onCheckedChange = onAaMessage,
                 colors = SwitchDefaults.colors(checkedTrackColor = Dash.Red, checkedThumbColor = Dash.Text),
             )
+        }
+
+        Spacer(Modifier.height(18.dp))
+        Caption("Registro de conexiones (cortes de Android Auto)")
+        Text(
+            "Apunta solo, con la hora exacta, todo lo que pasa con el Bluetooth del móvil, el Wi-Fi, " +
+                "Android Auto, la carga y el OBD. Cuando se corte Android Auto, entra aquí y pulsa MARCAR FALLO " +
+                "(o simplemente apunta la hora). Luego compártelo para ver qué cayó primero.",
+            style = dim,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { onMarkFailure(); marked = true }) {
+                Text(if (marked) "MARCADO ✓" else "MARCAR FALLO", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = onShareEvents) {
+                Text("COMPARTIR", color = Dash.Red, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = { showEvents = !showEvents }) {
+                Text(if (showEvents) "OCULTAR" else "VER", color = Dash.TextDim, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+            TextButton(onClick = onClearEvents) {
+                Text("BORRAR", color = Dash.TextDim, fontFamily = Rajdhani, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (showEvents) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .background(Color(0xFF050607), RoundedCornerShape(10.dp))
+                    .verticalScroll(rememberScrollState(), reverseScrolling = true)
+                    .padding(10.dp),
+            ) {
+                if (events.isEmpty()) Text("Sin eventos todavía.", style = dim)
+                events.forEach {
+                    val c = when {
+                        "MARCA" in it -> Dash.Red
+                        "PERDID" in it || "APAGADO" in it || "DESCONECTADO" in it || "ERROR" in it -> Dash.Amber
+                        else -> Dash.TextDim
+                    }
+                    Text(it, style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = c))
+                }
+            }
         }
 
         Spacer(Modifier.height(18.dp))

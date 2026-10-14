@@ -147,7 +147,8 @@ class DashboardViewModel(app: Application) : AndroidViewModel(app) {
     private fun log(msg: String) {
         val line = "${timeFmt.format(Date())}  $msg"
         _log.update { (it + line).takeLast(250) }
-        EventLog.add("OBD", msg)
+        // Las preguntas y respuestas al ELM327 no van al registro de conexiones: lo llenaban sin aportar.
+        if (!msg.startsWith("> ") && !msg.startsWith("< ")) EventLog.add("OBD", msg)
     }
 
     /** Registro de conexiones: cambios de estado del OBD y un "sigo vivo" cada 30 s con el voltaje. */

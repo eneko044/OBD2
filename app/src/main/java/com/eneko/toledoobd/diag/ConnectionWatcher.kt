@@ -30,6 +30,7 @@ class ConnectionWatcher(private val context: Context) {
     private val carConnection = CarConnection(context)
     private var lastCar: Int? = null
     private var started = false
+    private var lastWifiState: String? = null
 
     private val carObserver = Observer<Int> { type ->
         if (type == lastCar) return@Observer
@@ -72,15 +73,54 @@ class ConnectionWatcher(private val context: Context) {
                     },
                 )
                 WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> EventLog.add("WIFI", "Cambio en Wi-Fi Direct")
+                WifiManager.NETWORK_STATE_CHANGED_ACTION -> {
+                    @Suppress("DEPRECATION")
+                    val info: android.net.NetworkInfo? = if (Build.VERSION.SDK_INT >= 33) {
+                        i.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO, android.net.NetworkInfo::class.java)
+                    } else {
+                        i.getParcelableExtra(WifiManager.EXTRA_NETWORK_INFO)
+                    }
+                    @Suppress("DEPRECATION")
+                    val state = info?.detailedState?.name ?: return
+                    if (state != lastWifiState) {
+                        lastWifiState = state
+                        EventLog.add("WIFI", "Wi-Fi principal: " + when (state) {
+                            "CONNECTED" -> "CONECTADO"
+                            "DISCONNECTED" -> "DESCONECTADO"
+                            "CONNECTING", "AUTHENTICATING", "OBTAINING_IPADDR" -> "conectando…"
+                            "DISCONNECTING" -> "desconectando…"
+                            else -> state.lowercase()
+                        })
+                    }
+                }
+                Intent.ACTION_SCREEN_ON -> EventLog.add("MOVIL", "Pantalla del móvil ENCENDIDA")
+                Intent.ACTION_SCREEN_OFF -> EventLog.add("MOVIL", "Pantalla del móvil APAGADA")
                 Intent.ACTION_POWER_CONNECTED -> EventLog.add("CARGA", "Cargador CONECTADO")
                 Intent.ACTION_POWER_DISCONNECTED -> EventLog.add("CARGA", "Cargador DESCONECTADO")
             }
         }
     }
 
+    /** Último estado conocido de cada red Wi-Fi, para apuntar solo los cambios. */
+    private val wifiNets = mutableMapOf<Network, String>()
+
     private val wifiCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = EventLog.add("WIFI", "Red Wi-Fi disponible ($network)")
-        override fun onLost(network: Network) = EventLog.add("WIFI", "Red Wi-Fi PERDIDA ($network)")
+        override fun onAvailable(network: Network) = EventLog.add("WIFI", "Red Wi-Fi CONECTADA (red $network)")
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            // La red de la pantalla no tiene internet; la de casa sí. Así se distingue a cuál está conectado.
+            val desc = buildList {
+                add(if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) "con internet" else "SIN internet (pantalla Android Auto)")
+                if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) add("comprobada")
+                caps.signalStrength.takeIf { it != NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED }?.let { add("señal $it dBm") }
+            }.joinToString(", ")
+            if (wifiNets[network]?.substringBefore(", señal") == desc.substringBefore(", señal")) return
+            wifiNets[network] = desc
+            EventLog.add("WIFI", "Red $network: $desc")
+        }
+        override fun onLost(network: Network) {
+            wifiNets.remove(network)
+            EventLog.add("WIFI", "Red Wi-Fi PERDIDA (red $network)")
+        }
     }
 
     fun start() {
@@ -101,13 +141,23 @@ class ConnectionWatcher(private val context: Context) {
             addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
             addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
         }
         runCatching { ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED) }
         runCatching {
             context.getSystemService(ConnectivityManager::class.java).registerNetworkCallback(
-                NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), wifiCallback,
+                // Sin exigir internet: así también aparece la red Wi-Fi de la pantalla.
+                NetworkRequest.Builder().apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) clearCapabilities()
+                    else removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+                    addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                }.build(), wifiCallback,
             )
         }
         carConnection.type.observeForever(carObserver)
